@@ -1,9 +1,12 @@
 """Single-process persistent task worker."""
 from __future__ import annotations
+
 from collections.abc import Mapping
 from threading import Event, Lock, Thread
 from typing import Any
+
 from pydantic import ValidationError
+
 from app.models import WorkImport
 from app.repositories.catalog import CatalogRepository
 from app.repositories.tasks import ClaimedTask, TaskRepository
@@ -67,6 +70,8 @@ class TaskWorker:
                 result = self._run_source_scrape(task, "full")
             elif task.type == "scrape_incremental":
                 result = self._run_source_scrape(task, "incremental")
+            elif task.type == "enrich_work":
+                result = self._run_enrich_work(task)
             else:
                 raise ValueError(f"unsupported task type: {task.type}")
         except Exception as exc:  # Worker boundary: persist failure instead of dying.
@@ -128,6 +133,40 @@ class TaskWorker:
             "updated": updated,
             "restored": 0,
             "removed": 0,
+        }
+
+    def _run_enrich_work(self, task: ClaimedTask) -> dict[str, Any]:
+        try:
+            work_id = int(task.params.get("work_id"))
+        except (TypeError, ValueError) as exc:
+            raise ValueError("enrich_work task has no valid work_id") from exc
+        work = self.catalog_repository.get_work(work_id)
+        if work is None:
+            raise ValueError(f"work not found: {work_id}")
+        adapter = self.source_adapters.get(work.source)
+        if adapter is None:
+            raise ValueError(f"unsupported source: {work.source}")
+
+        def report_request(done: int, total: int, label: str) -> None:
+            fraction = done / total if total > 0 else 0.0
+            self.task_repository.update_progress(
+                task.id,
+                min(max(fraction * 0.7, 0.0), 0.7),
+                f"source request {done}/{total}: {label}"[:2000],
+            )
+
+        payload = adapter.enrich_work(work, progress=report_request)
+        if payload.source != work.source or payload.source_work_id != work.source_work_id:
+            raise ValueError("source adapter returned a mismatched work identity")
+        self.task_repository.update_progress(task.id, 0.8, "saving work detail")
+        result = self.catalog_repository.upsert_work(payload)
+        self.task_repository.update_progress(task.id, 1.0, "work detail saved")
+        return {
+            "work_id": result.work.id,
+            "source": result.work.source,
+            "source_work_id": result.work.source_work_id,
+            "episode_count": result.work.episode_count,
+            "updated": True,
         }
 
     def _upsert_works(

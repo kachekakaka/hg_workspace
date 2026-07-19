@@ -1,28 +1,59 @@
-"""Works, episodes, and compatibility read APIs."""
-
+"""Works, episodes, enrichment, and compatibility read APIs."""
 from __future__ import annotations
 
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 
-from app.dependencies import get_catalog_repository
+from app.dependencies import (
+    get_catalog_repository,
+    get_task_repository,
+    get_task_worker,
+)
 from app.models import (
     EpisodeRead,
     StatsRead,
+    TaskRead,
     WorkImport,
     WorkImportResult,
     WorkPage,
     WorkRead,
 )
 from app.repositories.catalog import CatalogRepository
+from app.repositories.tasks import TaskRepository
+from app.services.task_worker import TaskWorker
 
 router = APIRouter()
 RepositoryDependency = Annotated[CatalogRepository, Depends(get_catalog_repository)]
+TaskRepositoryDependency = Annotated[TaskRepository, Depends(get_task_repository)]
+TaskWorkerDependency = Annotated[TaskWorker, Depends(get_task_worker)]
 
 
 def _not_found(identifier: object) -> HTTPException:
     return HTTPException(status_code=404, detail=f"work not found: {identifier}")
+
+
+def _queue_enrichment(
+    work: WorkRead,
+    *,
+    task_repository: TaskRepository,
+    worker: TaskWorker,
+) -> TaskRead:
+    if work.source not in worker.supported_sources:
+        raise HTTPException(
+            status_code=422,
+            detail=f"source does not support detail enrichment: {work.source}",
+        )
+    active = task_repository.get_active_task(
+        "enrich_work",
+        params_match={"work_id": work.id},
+    )
+    if active is not None:
+        raise HTTPException(
+            status_code=409,
+            detail=f"enrichment task already active: {active.task_id}",
+        )
+    return task_repository.create_task("enrich_work", {"work_id": work.id})
 
 
 def _legacy_work(work: WorkRead) -> dict[str, object]:
@@ -100,6 +131,24 @@ def list_episodes(work_id: int, repository: RepositoryDependency) -> list[Episod
     return repository.list_episodes(work_id)
 
 
+@router.post(
+    "/api/v1/works/{work_id}/enrich",
+    response_model=TaskRead,
+    status_code=status.HTTP_202_ACCEPTED,
+    tags=["works", "tasks", "sources"],
+)
+def enrich_work_v1(
+    work_id: int,
+    repository: RepositoryDependency,
+    task_repository: TaskRepositoryDependency,
+    worker: TaskWorkerDependency,
+) -> TaskRead:
+    work = repository.get_work(work_id)
+    if work is None:
+        raise _not_found(work_id)
+    return _queue_enrichment(work, task_repository=task_repository, worker=worker)
+
+
 @router.get("/api/v1/stats", response_model=StatsRead, tags=["works"])
 def get_stats_v1(repository: RepositoryDependency) -> StatsRead:
     return repository.stats()
@@ -137,6 +186,24 @@ def get_work_legacy(series_id: str, repository: RepositoryDependency) -> dict[st
     if work is None:
         raise _not_found(series_id)
     return _legacy_work(work)
+
+
+@router.post(
+    "/api/works/{series_id}/enrich",
+    response_model=TaskRead,
+    status_code=status.HTTP_202_ACCEPTED,
+    tags=["legacy-web", "works", "tasks"],
+)
+def enrich_work_legacy(
+    series_id: str,
+    repository: RepositoryDependency,
+    task_repository: TaskRepositoryDependency,
+    worker: TaskWorkerDependency,
+) -> TaskRead:
+    work = repository.get_work_by_source_id(series_id)
+    if work is None:
+        raise _not_found(series_id)
+    return _queue_enrichment(work, task_repository=task_repository, worker=worker)
 
 
 @router.get("/api/stats", response_model=StatsRead, tags=["legacy-web"])

@@ -1,11 +1,8 @@
-"""Pure parsers for legacy NovelQuick/RedFruit SSR payloads.
+"""Pure parsers for public NovelQuick/RedFruit SSR payloads.
 
-The legacy project mixed HTTP access, credential handling, parsing, and CLI
-output. Phase 1 migrates only the deterministic parsing and URL-construction
-parts. Network access remains intentionally absent until the backend source
-adapter, authorization policy, timeouts, and fixtures are designed in Phase 2.
+This module contains no HTTP, credentials, or playback resolution. It only
+turns already-fetched HTML into deterministic metadata structures.
 """
-
 from __future__ import annotations
 
 import json
@@ -28,8 +25,6 @@ class SourceParseError(ValueError):
 
 @dataclass(frozen=True, slots=True)
 class EpisodeSeed:
-    """Source-level episode identity before persistence in SQLite."""
-
     source_episode_id: str
     episode_index: int
     title: str
@@ -83,7 +78,7 @@ def series_detail_from_html(html: str) -> dict[str, Any]:
 
 
 def player_info_from_html(html: str) -> dict[str, Any] | None:
-    """Return ``video_player_info`` when the SSR payload exposes one."""
+    """Return ``video_player_info`` without interpreting or requesting it."""
 
     router_data = parse_router_data(html)
     for mapping in _walk_mappings(router_data.get("loaderData")):
@@ -94,13 +89,15 @@ def player_info_from_html(html: str) -> dict[str, Any] | None:
 
 
 def episodes_from_detail(detail: Mapping[str, Any]) -> list[EpisodeSeed]:
-    """Normalize string or object entries from the legacy ``vid_list``."""
+    """Normalize string or object entries from the public ``vid_list``."""
 
     raw_episodes = detail.get("vid_list")
     if not isinstance(raw_episodes, list):
         return []
 
     episodes: list[EpisodeSeed] = []
+    seen_ids: set[str] = set()
+    seen_indexes: set[int] = set()
     for position, raw_episode in enumerate(raw_episodes, start=1):
         source_id = ""
         episode_index = position
@@ -113,22 +110,34 @@ def episodes_from_detail(detail: Mapping[str, Any]) -> list[EpisodeSeed]:
                 raw_episode.get("video_id")
                 or raw_episode.get("item_id")
                 or raw_episode.get("vid")
+                or raw_episode.get("episode_id")
                 or ""
             ).strip()
             try:
-                episode_index = int(raw_episode.get("index") or position)
+                episode_index = int(
+                    raw_episode.get("episode_index")
+                    or raw_episode.get("index")
+                    or raw_episode.get("episode_num")
+                    or position
+                )
             except (TypeError, ValueError):
                 episode_index = position
-            title = str(raw_episode.get("title") or f"第 {episode_index} 集").strip()
+            title = str(
+                raw_episode.get("title")
+                or raw_episode.get("episode_name")
+                or f"第 {episode_index} 集"
+            ).strip()
 
-        if not source_id:
+        episode_index = max(episode_index, 1)
+        if not source_id or source_id in seen_ids or episode_index in seen_indexes:
             continue
+        seen_ids.add(source_id)
+        seen_indexes.add(episode_index)
         episodes.append(
             EpisodeSeed(
                 source_episode_id=source_id,
-                episode_index=max(episode_index, 1),
-                title=title or f"第 {max(episode_index, 1)} 集",
+                episode_index=episode_index,
+                title=title or f"第 {episode_index} 集",
             )
         )
-
     return episodes

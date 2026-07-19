@@ -19,7 +19,8 @@ HG Workspace 正在重构为一个简单、可审计的单仓库项目：
 - 旧 catalog 纯映射、持久化任务、retry 和启动恢复；
 - 原生静态作品、统计、任务与导入管理页；
 - `novelquick` 公开 SSR 作品元数据适配器；
-- 全量/增量发现任务和 Web 触发入口。
+- 全量/增量发现任务和 Web 触发入口；
+- 公开详情页 enrichment 任务，将分集标识和集序写入 SQLite。
 
 仍未实现 Cookie/Authorization 播放解析、playback direct/proxy/cache、HTTP Range、媒体下载、Android APK 和真机测试。
 
@@ -60,7 +61,7 @@ HG_SOURCE_DELAY=0.15
 
 ## Web 管理页面
 
-- `/`：作品分页、搜索、状态/标签过滤、详情和已入库分集；
+- `/`：作品分页、搜索、状态/标签过滤、详情、已入库分集和“刷新公开详情与分集”任务；
 - `/stats.html`：作品统计和服务状态；
 - `/tasks.html`：增量/全量公开元数据发现、本地 catalog JSON 导入、任务历史、进度、结果和 retry。
 
@@ -97,6 +98,23 @@ curl --fail http://localhost:8000/api/v1/tasks/<task-id>
 - 进程重启时 `running` 任务变为 `interrupted`，可 retry；
 - 本批次只保存作品元数据，不保存或解析播放地址。
 
+## 刷新公开详情与分集
+
+已入库作品可以创建持久化 enrichment 任务：
+
+```bash
+curl --fail --request POST \
+  http://localhost:8000/api/v1/works/<work-id>/enrich
+```
+
+兼容旧 Web 的入口：
+
+```text
+POST /api/works/{series_id}/enrich
+```
+
+该任务读取公开 SSR `seriesDetail`，更新名称、封面、简介、标签等元数据，并把非空 `vid_list` 规范化为分集标识和集序。它不请求 player 页面，也不保存播放 URL。来源暂时返回空或不可用 `vid_list` 时，现有分集不会被清空。
+
 ## 安全与内容边界
 
 内容源功能只适用于有权访问和保存的公开作品元数据。当前实现：
@@ -121,6 +139,7 @@ curl --fail --request POST \
 
 ```text
 POST /api/v1/works/import
+POST /api/v1/works/{id}/enrich
 POST /api/v1/imports/catalog
 POST /api/v1/tasks/scrape/full
 POST /api/v1/tasks/scrape/incremental
@@ -139,6 +158,7 @@ POST /api/v1/tasks/{id}/retry
 POST /api/tasks/scrape/full
 POST /api/tasks/scrape/incremental
 POST /api/works/import
+POST /api/works/{series_id}/enrich
 GET  /api/works
 GET  /api/works/{series_id}
 GET  /api/stats

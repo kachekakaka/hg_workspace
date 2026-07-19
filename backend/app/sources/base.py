@@ -1,12 +1,15 @@
-"""Small content-source interface used by persistent scrape tasks."""
+"""Small content-source interface used by persistent source tasks."""
 from __future__ import annotations
+
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal, Protocol
-from app.models import WorkImport
+
+from app.models import WorkImport, WorkRead
 
 ScrapeMode = Literal["full", "incremental"]
 SourceProgress = Callable[[int, int, str], None]
+
 
 @dataclass(frozen=True, slots=True)
 class DiscoveryResult:
@@ -15,11 +18,20 @@ class DiscoveryResult:
     works: list[WorkImport]
     request_count: int
 
+
 class SourceAdapter(Protocol):
     name: str
+
     def discover(
         self,
         mode: ScrapeMode,
         *,
         progress: SourceProgress | None = None,
     ) -> DiscoveryResult: ...
+
+    def enrich_work(
+        self,
+        work: WorkRead,
+        *,
+        progress: SourceProgress | None = None,
+    ) -> WorkImport: ...
