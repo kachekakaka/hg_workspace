@@ -8,6 +8,7 @@ from app.db import Database
 EXPECTED_TABLES = {
     "episodes",
     "media_cache",
+    "playback_resolutions",
     "schema_migrations",
     "settings",
     "tasks",
@@ -18,7 +19,7 @@ EXPECTED_TABLES = {
 def test_migrations_are_idempotent(tmp_path: Path) -> None:
     database = Database(tmp_path / "catalog.db")
 
-    assert database.migrate() == [1]
+    assert database.migrate() == [1, 2]
     assert database.migrate() == []
 
     with database.connect() as connection:
@@ -36,4 +37,4 @@ def test_migrations_are_idempotent(tmp_path: Path) -> None:
         ]
 
     assert EXPECTED_TABLES <= tables
-    assert versions == [1]
+    assert versions == [1, 2]

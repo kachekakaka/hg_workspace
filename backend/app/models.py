@@ -144,3 +144,16 @@ class TaskPage(BaseModel):
     total: int
     limit: int
     offset: int
+
+
+PlaybackDelivery = Literal["direct", "proxy_required"]
+
+
+class PlaybackRead(BaseModel):
+    episode_id: int
+    provider: str
+    delivery: PlaybackDelivery
+    url: str | None = None
+    mime_type: str = ""
+    expires_at: str
+    cached: bool
