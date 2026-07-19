@@ -5,59 +5,48 @@
 
 ## 已合并基线
 
-Phase 1 已通过 PR #1 合入 `main`：
-
 ```text
-main merge commit
-c68d33b5e1a552a5cc4706515f54b05eb17796d7
+PR #1 -> main
+Docker/FastAPI 基线、仓库卫生检查、旧工程审计、纯解析逻辑
+
+PR #2 -> main
+版本化 SQLite、作品/分集 repository、正式作品 API、旧 Web 只读兼容 API
 ```
 
-Phase 1 包含 Docker/FastAPI `/health` 基线、CI、仓库卫生检查、旧工程审计，以及视频质量和 NovelQuick SSR 的无网络纯解析迁移。
-
-## 当前功能分支
+PR #2 的 merge commit：
 
 ```text
-phase-2/backend-foundation
-base: c68d33b5e1a552a5cc4706515f54b05eb17796d7
+6f3749363ed5c30ce1e5d186cb9118381545c9bf
 ```
 
-本分支范围：
+## 当前批次
 
-- Python `sqlite3` 数据库封装；
-- `NNNN_*.sql` 版本化迁移；
-- `works`、`episodes`、`media_cache`、`tasks`、`settings` 初始 schema；
-- 作品/分集 repository；
-- 幂等作品导入和权威分集快照同步；
-- 分页、搜索、状态/标签过滤和统计；
-- `/api/v1` 作品、详情、分集和导入接口；
-- 旧原生 Web 所需的作品、详情、统计、状态只读兼容接口；
-- 合成 fixture、迁移幂等、repository、API 和重启持久化测试。
+分支：`phase-2/catalog-import-tasks`
 
-## 重要设计边界
+实现范围：
 
-- 不使用 SQLAlchemy、Alembic、Redis、Celery 或 PostgreSQL；
-- `episodes` 缺省时保留已有分集，显式数组才执行快照同步；
-- 本分支不发起外部内容源请求；
-- 不存储或下发 Cookie、Authorization、私钥或长期播放 URL；
-- 未实现抓取任务、播放解析、Range 代理、下载、Web 静态页面或 Android；
-- Qt/C++、`catalog.pack`、手机伴侣、TV 内置 Server、mDNS 和 WebSocket 不恢复。
+- 旧 catalog/checkpoint JSON 的纯映射；
+- 可选声明集数与实际分集快照语义；
+- SQLite 持久化任务 repository；
+- 单工作线程 worker；
+- `running -> interrupted` 启动恢复；
+- failed/interrupted retry；
+- catalog 异步导入；
+- 正式任务 API 与旧 Web 兼容任务读取接口。
 
-## 旧工程输入
+## 安全边界
 
-旧归档和详细 Review 已审计但没有原样提交：
+- catalog 导入只处理请求体中的本地 JSON；
+- 本批次没有第三方网络请求；
+- 没有迁移 Cookie、Authorization、播放地址解析或 probe 输出；
+- 没有把旧压缩包、APK、DLL、日志或本机路径提交到 GitHub；
+- 不绕过 DRM、付费或访问控制。
 
-```text
-hg_workspace(3).rar
-SHA-256 a0b95437b120ec9ed57a61d5acc04dfa883f8b4362fac12b96f77be667e8bfbf
+## 仍未完成
 
-HG_精简重构方案_Review(1).md
-SHA-256 b4cfdb9dae01e744f7586b7283dbd6f4a3129e358684b171d590b1e8314c1fed
-```
+- 全量/增量抓取适配器和抓取任务；
+- 原生静态 Web 页面；
+- 播放 direct/proxy/cache、Range 和下载；
+- Android 通用 APK、Docker Android builder 和真机测试。
 
-审计结果见 `docs/LEGACY_SOURCE_AUDIT.md`。
-
-## 后续入口
-
-下一批工作必须先以 fixture 驱动方式迁移旧 catalog/抓取结果到 `WorkImport`，再实现持久化任务 worker；不能把旧 checkpoint JSON 继续当作服务端主库。
-
-每次报告仍必须列出：branch、commit SHA、PR、修改文件、实际命令、结果、CI 状态和未解决问题。
+每次后续报告继续列出：branch、commit SHA、PR、修改文件、实际命令、结果、CI 和未解决问题。

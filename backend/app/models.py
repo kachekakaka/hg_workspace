@@ -6,6 +6,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+TaskStatus = Literal["pending", "running", "completed", "failed", "interrupted"]
+
 
 class EpisodeImport(BaseModel):
     source_episode_id: str = Field(min_length=1, max_length=256)
@@ -37,6 +39,7 @@ class WorkImport(BaseModel):
     episode_right_text: str = Field(default="", max_length=512)
     tags: list[str] = Field(default_factory=list, max_length=100)
     celebrities: list[str | dict[str, Any]] = Field(default_factory=list, max_length=100)
+    episode_count: int | None = Field(default=None, ge=0)
     status: Literal["active", "removed"] = "active"
     episodes: list[EpisodeImport] | None = Field(default=None, max_length=10_000)
 
@@ -122,3 +125,22 @@ class StatsRead(BaseModel):
     total: int
     active: int
     removed: int
+
+
+class TaskRead(BaseModel):
+    id: str
+    task_id: str
+    type: str
+    status: TaskStatus
+    progress: float = Field(ge=0, le=1)
+    message: str
+    result: dict[str, Any]
+    created_at: str
+    updated_at: str
+
+
+class TaskPage(BaseModel):
+    items: list[TaskRead]
+    total: int
+    limit: int
+    offset: int

@@ -12,20 +12,22 @@ HG Workspace 正在重构为一个简单、可审计的单仓库项目：
 
 ## 当前进度
 
-Phase 1 已通过 PR #1 合入 `main`，建立了 Docker/FastAPI 基线、仓库卫生检查、旧工程审计和两组纯解析逻辑。
+已合入的基础：
 
-`phase-2/backend-foundation` 增加首个持久化作品目录闭环：
+- PR #1：Docker/FastAPI 基线、仓库卫生检查、旧工程审计和纯解析逻辑；
+- PR #2：版本化 SQLite、作品/分集 repository、正式 API 和旧 Web 只读兼容 API。
 
-- 直接使用 Python `sqlite3`，不引入 SQLAlchemy 或 Alembic；
-- 使用 `backend/app/migrations/NNNN_*.sql` 管理版本化 SQL；
-- 建立 `works`、`episodes`、`media_cache`、`tasks`、`settings` 表；
-- 幂等导入一部作品及其分集；
-- 分页、搜索、状态和标签过滤；
-- 作品详情与分集读取；
-- 为旧原生 Web 提供作品、详情、统计和状态的只读兼容接口；
-- 使用合成 fixture 测试，不进行外部网络抓取。
+当前批次增加：
 
-尚未接入全量/增量抓取、Cookie/Authorization、播放解析、Range 代理、下载任务、Web 静态页面和 Android 客户端。
+- 旧 `catalog.json` / checkpoint JSON 到 `WorkImport` 的纯映射；
+- 声明集数导入，同时保留“实际分集快照优先”的语义；
+- SQLite 持久化任务队列；
+- 单进程、单线程任务 worker；
+- 服务重启时把遗留 `running` 任务标记为 `interrupted`；
+- 失败或中断任务重试；
+- 正式与旧 Web 兼容的任务查询和 catalog 导入 API。
+
+本批次不会访问第三方网络，不迁移 Cookie/Authorization，也不实现抓取、播放、代理或下载。
 
 ## 宿主机要求
 
@@ -57,16 +59,17 @@ curl --fail http://localhost:8000/health
 {"status":"ok","service":"hg-backend"}
 ```
 
-SQLite 默认保存在 Docker volume 的 `/data/hg.db`。可通过 `.env` 覆盖：
+SQLite 默认保存在 Docker volume 的 `/data/hg.db`。任务 worker 默认启用：
 
 ```text
 HG_DATABASE=/data/hg.db
-HG_BACKEND_PORT=8000
+HG_TASK_WORKER_ENABLED=true
+HG_TASK_POLL_INTERVAL=0.5
 ```
 
-## 导入合成作品
+## 导入单部作品
 
-`POST /api/v1/works/import` 接受作品和可选分集快照：
+`POST /api/v1/works/import` 接受标准化作品和可选分集快照：
 
 ```bash
 curl --fail --request POST http://localhost:8000/api/v1/works/import \
@@ -75,46 +78,84 @@ curl --fail --request POST http://localhost:8000/api/v1/works/import \
     "source": "manual",
     "source_work_id": "demo-001",
     "series_name": "测试作品",
-    "tags": ["测试"],
-    "episodes": [
-      {
-        "source_episode_id": "demo-001-ep-1",
-        "episode_index": 1,
-        "title": "第一集"
-      }
-    ]
+    "episode_count": 12
   }'
 ```
 
 导入规则：
 
-- `(source, source_work_id)` 唯一，重复提交会更新同一作品；
-- 缺省 `episodes` 表示只更新作品元数据并保留现有分集；
-- 提供 `episodes` 数组时，该数组是权威快照；空数组会清空该作品分集；
+- `(source, source_work_id)` 唯一，重复提交更新同一作品；
+- 缺省 `episodes` 时保留现有分集；
+- 此时可用 `episode_count` 保存来源声明的总集数；
+- 提供 `episodes` 数组时，该数组是权威快照，实际数组长度覆盖声明集数；
+- 空 `episodes` 数组清空该作品分集；
 - 播放 URL 不作为永久作品数据保存。
+
+## 异步导入旧 catalog
+
+下列命令只解析本地 JSON 请求体，不会触发网络抓取：
+
+```bash
+curl --fail --request POST \
+  'http://localhost:8000/api/v1/imports/catalog?source=novelquick' \
+  --header 'Content-Type: application/json' \
+  --data-binary @catalog.json
+```
+
+接口返回 HTTP 202 和任务 ID。查询任务：
+
+```bash
+curl --fail http://localhost:8000/api/v1/tasks/<task-id>
+```
+
+支持的旧 catalog 根结构：
+
+- 作品数组；
+- `{ "works": [...] }`；
+- `{ "works": { "series-id": {...} } }` checkpoint 映射。
+
+旧记录中的 `source` 往往是发现路径，不作为稳定来源键。调用方通过 `source` 查询参数指定稳定适配器名，默认是 `novelquick`。
 
 ## 当前 API
 
-新版 API：
+正式 API：
 
 ```text
 POST /api/v1/works/import
-GET  /api/v1/works?q=&status=&tag=&limit=&offset=
+POST /api/v1/imports/catalog
+GET  /api/v1/works
 GET  /api/v1/works/{id}
 GET  /api/v1/works/{id}/episodes
 GET  /api/v1/stats
+GET  /api/v1/tasks
+GET  /api/v1/tasks/{id}
+POST /api/v1/tasks/{id}/retry
 ```
 
-旧 Web 只读兼容 API：
+旧 Web 兼容 API：
 
 ```text
-GET /api/works?q=&status=&tag=&page=&page_size=
-GET /api/works/{series_id}
-GET /api/stats
-GET /api/status
+GET  /api/works
+GET  /api/works/{series_id}
+POST /api/works/import
+GET  /api/stats
+GET  /api/status
+GET  /api/tasks
+GET  /api/tasks/{task_id}
 ```
 
 交互式 OpenAPI：`http://localhost:8000/docs`。
+
+## 任务语义
+
+```text
+API 写入 pending
+→ worker 原子领取为 running
+→ 持续写入 progress/message
+→ completed 或 failed
+```
+
+进程重启时，旧的 `running` 任务转为 `interrupted`，可通过 retry API 重新排队。catalog 导入按作品幂等写入；若进程在批次中途停止，重试不会重复创建已导入作品。
 
 ## 运行测试
 
@@ -132,8 +173,8 @@ GitHub Actions 还会运行仓库卫生、明显 secret、Python 编译、Compos
 ├── backend/
 │   ├── app/api/               # FastAPI 路由
 │   ├── app/migrations/        # 版本化 SQLite SQL
-│   ├── app/repositories/      # sqlite3 repository
-│   ├── app/services/          # 纯服务逻辑
+│   ├── app/repositories/      # catalog 与 task repositories
+│   ├── app/services/          # 纯映射、任务 worker 与其他服务逻辑
 │   ├── app/sources/           # 内容源纯解析器
 │   └── tests/                 # fixture 驱动测试
 ├── docs/                      # 架构、审计、计划和 ADR
@@ -144,9 +185,9 @@ GitHub Actions 还会运行仓库卫生、明显 secret、Python 编译、Compos
 
 ## 后续顺序
 
-1. 迁移旧 catalog JSON 的纯导入映射并补 fixture；
-2. 把全量/增量抓取改为写入 repository，而不是 checkpoint 主库；
-3. 实现任务持久化、崩溃恢复和旧 Web 任务 API；
-4. 迁移原生静态 Web；
-5. 实现授权内容的播放 direct/proxy/cache；
-6. 建立 Docker 化 Android 通用 APK，再实现下载和设备验证。
+1. 把全量/增量抓取改为内容源适配器输出 `WorkImport`，不再维护 checkpoint 主库；
+2. 实现抓取任务类型及旧 Web 的 full/incremental 触发端点；
+3. 迁移原生静态 Web；
+4. 为有权访问的内容实现 playback direct/proxy/cache；
+5. 建立 Docker 化 Android 通用 APK；
+6. 实现单集下载、离线播放和设备验证。

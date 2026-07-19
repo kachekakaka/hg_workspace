@@ -149,7 +149,7 @@ def get_status_legacy(request: Request, repository: RepositoryDependency) -> dic
     stats = repository.stats()
     settings = request.app.state.settings
     return {
-        "version": "0.2.0",
+        "version": request.app.version,
         "http_port": settings.backend_port,
         "catalog_total": stats.total,
         "catalog_active": stats.active,
