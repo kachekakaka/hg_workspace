@@ -34,6 +34,12 @@ class UpsertedWork:
     work: WorkRead
 
 
+@dataclass(frozen=True, slots=True)
+class EpisodeContext:
+    work: WorkRead
+    episode: EpisodeRead
+
+
 class CatalogRepository:
     def __init__(self, database: Database) -> None:
         self.database = database
@@ -266,6 +272,30 @@ class CatalogRepository:
                 (work_id,),
             ).fetchall()
         return [self._episode_from_row(row) for row in rows]
+
+    def get_episode(self, episode_id: int) -> EpisodeRead | None:
+        with self.database.connect() as connection:
+            row = connection.execute(
+                "SELECT * FROM episodes WHERE id = ?", (episode_id,)
+            ).fetchone()
+        return self._episode_from_row(row) if row is not None else None
+
+    def get_episode_context(self, episode_id: int) -> EpisodeContext | None:
+        with self.database.connect() as connection:
+            episode_row = connection.execute(
+                "SELECT * FROM episodes WHERE id = ?", (episode_id,)
+            ).fetchone()
+            if episode_row is None:
+                return None
+            work_row = connection.execute(
+                "SELECT * FROM works WHERE id = ?", (episode_row["work_id"],)
+            ).fetchone()
+        if work_row is None:
+            return None
+        return EpisodeContext(
+            work=self._work_from_row(work_row),
+            episode=self._episode_from_row(episode_row),
+        )
 
     def stats(self) -> StatsRead:
         with self.database.connect() as connection:

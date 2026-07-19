@@ -49,6 +49,7 @@ class Settings:
     source_timeout: float = 20.0
     source_retries: int = 3
     source_delay: float = 0.15
+    playback_max_ttl_seconds: int = 21_600
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -65,4 +66,7 @@ class Settings:
             source_timeout=_env_float("HG_SOURCE_TIMEOUT", 20, minimum=1, maximum=120),
             source_retries=_env_int("HG_SOURCE_RETRIES", 3, minimum=1, maximum=8),
             source_delay=_env_float("HG_SOURCE_DELAY", 0.15, minimum=0, maximum=10),
+            playback_max_ttl_seconds=_env_int(
+                "HG_PLAYBACK_MAX_TTL", 21_600, minimum=60, maximum=86_400
+            ),
         )
