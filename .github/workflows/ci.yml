@@ -1,0 +1,67 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  repository-hygiene:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Check generated files and obvious secrets
+        run: python scripts/check_repository.py
+
+      - name: Compile Python sources
+        run: python -m compileall -q backend/app backend/tests scripts
+
+      - name: Validate Docker Compose configuration
+        run: docker compose config --quiet
+
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Build test image
+        run: docker build --target test -t hg-backend-test ./backend
+
+      - name: Run backend tests
+        run: docker run --rm hg-backend-test
+
+      - name: Build runtime image
+        run: docker build --target runtime -t hg-backend ./backend
+
+      - name: Run health smoke test
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --detach --name hg-backend --publish 8000:8000 hg-backend
+          trap 'docker logs hg-backend; docker rm --force hg-backend' EXIT
+
+          for attempt in {1..30}; do
+            if curl --fail --silent --show-error http://127.0.0.1:8000/health; then
+              exit 0
+            fi
+            sleep 1
+          done
+
+          echo "backend did not become healthy" >&2
+          exit 1

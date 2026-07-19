@@ -1,0 +1,73 @@
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+local.properties
+*.keystore
+*.jks
+*.p12
+*.pfx
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+*.egg-info/
+build/
+dist/
+
+# Runtime data
+/data/
+data/
+downloads/
+cache/
+logs/
+*.db
+*.db-*
+*.sqlite
+*.sqlite3
+*.sqlite-*
+
+# Android / Gradle
+.gradle/
+**/build/
+.cxx/
+.externalNativeBuild/
+captures/
+*.apk
+*.aab
+*.apks
+*.idsig
+
+# Native / packaged build output
+*.dll
+*.exe
+*.obj
+*.pdb
+*.so
+*.dylib
+
+# Legacy archives and migration inputs
+*.rar
+*.7z
+*.zip
+/legacy-input/
+
+# Editors and operating systems
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Test and tool output
+artifacts/
+dist/
+reports/
