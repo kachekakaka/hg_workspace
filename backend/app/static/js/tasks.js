@@ -3,7 +3,7 @@ import { clear, errorMessage, formatDate, setStatus, text } from './common.js';
 
 const MAX_FILE_SIZE = 20 * 1024 * 1024;
 const statusLabels = { pending: '等待中', running: '运行中', completed: '已完成', failed: '失败', interrupted: '已中断' };
-const taskTypeLabels = { catalog_import: 'catalog 导入', scrape_full: '全量发现', scrape_incremental: '增量发现' };
+const taskTypeLabels = { catalog_import: 'catalog 导入', scrape_full: '全量发现', scrape_incremental: '增量发现', enrich_work: '刷新作品详情' };
 
 function taskTypeLabel(type) { return taskTypeLabels[type] || type; }
 function resultSummary(task) {
@@ -11,6 +11,9 @@ function resultSummary(task) {
     const result = task.result || {};
     if (task.type === 'scrape_full' || task.type === 'scrape_incremental') {
       return `发现 ${result.discovered || 0}，新增 ${result.added || 0}，更新 ${result.updated || 0}，请求 ${result.requests || 0}`;
+    }
+    if (task.type === 'enrich_work') {
+      return `作品 ${result.source_work_id || '--'}，分集 ${result.episode_count || 0}`;
     }
     return `总计 ${result.total || 0}，新增 ${result.added || 0}，更新 ${result.updated || 0}`;
   }

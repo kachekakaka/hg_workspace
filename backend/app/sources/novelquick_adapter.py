@@ -15,10 +15,16 @@ import urllib.request
 from collections.abc import Callable, Mapping
 from typing import Any
 
-from app.models import WorkImport
+from app.models import EpisodeImport, WorkImport, WorkRead
 from app.services.legacy_catalog import LegacyCatalogError, normalize_legacy_catalog
 from app.sources.base import DiscoveryResult, ScrapeMode, SourceProgress
-from app.sources.novelquick import BASE_URL, SourceParseError, parse_router_data
+from app.sources.novelquick import (
+    BASE_URL,
+    SourceParseError,
+    episodes_from_detail,
+    parse_router_data,
+    series_detail_from_html,
+)
 
 USER_AGENT = (
     "Mozilla/5.0 (compatible; HGWorkspace/0.5; +public-metadata-adapter)"
@@ -295,4 +301,107 @@ class NovelQuickSourceAdapter:
             mode=mode,
             works=works,
             request_count=request_count,
+        )
+
+    def enrich_work(
+        self,
+        work: WorkRead,
+        *,
+        progress: SourceProgress | None = None,
+    ) -> WorkImport:
+        """Refresh one work and its public episode identifiers from SSR detail."""
+
+        if work.source != self.name:
+            raise ValueError(f"work source {work.source!r} does not match {self.name!r}")
+        detail_url = (
+            f"{self.base_url}/detail?"
+            + urllib.parse.urlencode({"series_id": work.source_work_id})
+        )
+        try:
+            detail = series_detail_from_html(self.fetch_text(detail_url))
+        except SourceParseError as exc:
+            raise SourceRequestError(
+                f"source detail page does not contain valid SSR metadata: {detail_url}"
+            ) from exc
+        if progress:
+            progress(1, 1, "detail")
+
+        detail_series_id = str(detail.get("series_id") or "").strip()
+        if detail_series_id and detail_series_id != work.source_work_id:
+            raise SourceRequestError(
+                "source detail response returned a mismatched series_id"
+            )
+
+        seeds = episodes_from_detail(detail)
+        episodes = (
+            [
+                EpisodeImport(
+                    source_episode_id=seed.source_episode_id,
+                    episode_index=seed.episode_index,
+                    title=seed.title,
+                )
+                for seed in seeds
+            ]
+            if seeds
+            else None
+        )
+
+        raw_tags = detail.get("tags") or detail.get("tag_list") or work.tags
+        if isinstance(raw_tags, str):
+            raw_tags = raw_tags.replace("，", ",").split(",")
+        normalized_tags: list[str] = []
+        if isinstance(raw_tags, list):
+            for raw_tag in raw_tags:
+                if isinstance(raw_tag, Mapping):
+                    raw_tag = (
+                        raw_tag.get("name")
+                        or raw_tag.get("show_name")
+                        or raw_tag.get("tag_name")
+                        or ""
+                    )
+                tag = str(raw_tag or "").strip()
+                if tag and tag not in normalized_tags:
+                    normalized_tags.append(tag)
+        if not normalized_tags:
+            normalized_tags = list(work.tags)
+
+        celebrities = detail.get("celebrities") or detail.get("actor_list") or work.celebrities
+        if not isinstance(celebrities, list):
+            celebrities = work.celebrities
+
+        declared_count = work.episode_count
+        for candidate in (
+            detail.get("episode_count"),
+            detail.get("episode_cnt"),
+            detail.get("total_episode"),
+        ):
+            try:
+                if candidate is not None and int(candidate) >= 0:
+                    declared_count = int(candidate)
+                    break
+            except (TypeError, ValueError):
+                continue
+        if episodes is not None:
+            declared_count = len(episodes)
+
+        return WorkImport(
+            source=self.name,
+            source_work_id=work.source_work_id,
+            series_name=str(detail.get("series_name") or work.series_name).strip(),
+            series_cover=str(detail.get("series_cover") or detail.get("cover") or work.series_cover).strip(),
+            series_intro=str(
+                detail.get("series_intro")
+                or detail.get("intro")
+                or detail.get("description")
+                or work.series_intro
+            ).strip(),
+            detail_url=detail_url,
+            episode_right_text=str(
+                detail.get("episode_right_text") or work.episode_right_text
+            ).strip(),
+            tags=normalized_tags,
+            celebrities=celebrities,
+            episode_count=declared_count,
+            status=work.status,
+            episodes=episodes,
         )

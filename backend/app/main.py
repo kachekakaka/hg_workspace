@@ -40,7 +40,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     application = FastAPI(
         title="HG Workspace Backend",
-        version="0.5.0",
+        version="0.6.0",
         docs_url="/docs",
         redoc_url=None,
         lifespan=lifespan,

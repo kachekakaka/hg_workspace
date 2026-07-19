@@ -11,7 +11,7 @@ from app.models import TaskPage, TaskRead
 
 
 def _utc_now() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+    return datetime.now(timezone.utc).isoformat(timespec="microseconds")
 
 
 def _decode_object(raw: str) -> dict[str, Any]:
@@ -77,19 +77,30 @@ class TaskRepository:
             row = connection.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone()
         return self._task_from_row(row) if row is not None else None
 
-    def get_active_task(self, task_type: str) -> TaskRead | None:
-        """Return the oldest pending/running task of a type, if one exists."""
+    def get_active_task(
+        self,
+        task_type: str,
+        *,
+        params_match: dict[str, Any] | None = None,
+    ) -> TaskRead | None:
+        """Return the oldest matching pending/running task, if one exists."""
+
         with self.database.connect() as connection:
-            row = connection.execute(
+            rows = connection.execute(
                 """
                 SELECT * FROM tasks
                 WHERE type = ? AND status IN ('pending', 'running')
-                ORDER BY created_at ASC, id ASC
-                LIMIT 1
+                ORDER BY created_at ASC, rowid ASC
                 """,
                 (task_type.strip(),),
-            ).fetchone()
-        return self._task_from_row(row) if row is not None else None
+            ).fetchall()
+        for row in rows:
+            if params_match:
+                params = _decode_object(str(row["params_json"]))
+                if any(params.get(key) != value for key, value in params_match.items()):
+                    continue
+            return self._task_from_row(row)
+        return None
 
     def list_tasks(
         self,
@@ -118,7 +129,7 @@ class TaskRepository:
                 f"""
                 SELECT * FROM tasks
                 {where}
-                ORDER BY created_at DESC, id DESC
+                ORDER BY created_at DESC, rowid DESC
                 LIMIT ? OFFSET ?
                 """,
                 (*params, limit, offset),
@@ -137,7 +148,7 @@ class TaskRepository:
                 """
                 SELECT id, type, params_json FROM tasks
                 WHERE status = 'pending'
-                ORDER BY created_at ASC, id ASC
+                ORDER BY created_at ASC, rowid ASC
                 LIMIT 1
                 """
             ).fetchone()

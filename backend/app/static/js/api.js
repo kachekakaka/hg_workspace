@@ -50,6 +50,10 @@ export function getWorks({ q = '', status = 'active', tag = '', page = 1, pageSi
 }
 export function getWork(seriesId) { return apiFetch(`/api/works/${encodeURIComponent(seriesId)}`); }
 export function getEpisodes(workId) { return apiFetch(`/api/v1/works/${encodeURIComponent(workId)}/episodes`); }
+
+export function enrichWork(workId) {
+  return apiFetch(`/api/v1/works/${encodeURIComponent(workId)}/enrich`, { method: 'POST' });
+}
 export function getStats() { return apiFetch('/api/stats'); }
 export function getStatus() { return apiFetch('/api/status'); }
 export function getTasks({ limit = 100 } = {}) { return apiFetch(`/api/tasks?${queryString({ limit })}`); }

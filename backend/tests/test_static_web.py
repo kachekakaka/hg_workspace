@@ -16,10 +16,12 @@ def test_scrape_admin_page_and_assets_are_served(tmp_path) -> None:
         api_js = client.get("/js/api.js")
         assert api_js.status_code == 200
         assert "/api/v1/tasks/scrape/${mode}" in api_js.text
+        assert "/api/v1/works/${encodeURIComponent(workId)}/enrich" in api_js.text
 
         tasks_js = client.get("/js/tasks.js")
         assert tasks_js.status_code == 200
         assert "queueSourceScrape" in tasks_js.text
+        assert "enrich_work" in tasks_js.text
         assert "scrape_incremental" in tasks_js.text
 
 
@@ -29,22 +31,24 @@ def test_api_and_openapi_routes_take_precedence_over_static_mount(tmp_path) -> N
         assert client.get("/health").json() == {"status": "ok", "service": "hg-backend"}
         status = client.get("/api/status")
         assert status.status_code == 200
-        assert status.json()["version"] == "0.5.0"
+        assert status.json()["version"] == "0.6.0"
         schema = client.get("/openapi.json")
         assert schema.status_code == 200
         paths = schema.json()["paths"]
         assert "/api/v1/tasks/scrape/full" in paths
         assert "/api/v1/tasks/scrape/incremental" in paths
+        assert "/api/v1/works/{work_id}/enrich" in paths
 
 
 def test_admin_ui_exposes_only_implemented_source_actions(tmp_path) -> None:
     app = create_app(Settings(database_path=tmp_path / "catalog.db", task_worker_enabled=False))
     with TestClient(app) as client:
         combined = "\n".join(
-            client.get(path).text for path in ("/tasks.html", "/js/api.js", "/js/tasks.js")
+            client.get(path).text for path in ("/tasks.html", "/js/api.js", "/js/tasks.js", "/js/index.js")
         )
         assert "/api/v1/tasks/scrape/${mode}" in combined
-        assert "/enrich" not in combined
+        assert "/api/v1/works/${encodeURIComponent(workId)}/enrich" in combined
         assert "WebSocket" not in combined
         assert "Authorization" in combined
         assert "DRM" in combined
+        assert "刷新公开详情与分集" in combined
