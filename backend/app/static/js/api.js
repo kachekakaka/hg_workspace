@@ -24,20 +24,15 @@ async function apiFetch(path, options = {}) {
   if (request.body !== undefined && !request.headers.has('Content-Type')) {
     request.headers.set('Content-Type', 'application/json');
   }
-
   let response;
   try {
     response = await fetch(API_BASE + path, request);
   } catch (error) {
     throw new ApiError(`无法连接后端：${error.message || error}`);
   }
-
   const payload = await response.json().catch(() => null);
   if (!response.ok) {
-    throw new ApiError(
-      detailMessage(payload, `请求失败：HTTP ${response.status}`),
-      response.status,
-    );
+    throw new ApiError(detailMessage(payload, `请求失败：HTTP ${response.status}`), response.status);
   }
   return payload;
 }
@@ -45,50 +40,25 @@ async function apiFetch(path, options = {}) {
 function queryString(params) {
   const query = new URLSearchParams();
   Object.entries(params).forEach(([key, value]) => {
-    if (value !== '' && value !== null && value !== undefined) {
-      query.set(key, String(value));
-    }
+    if (value !== '' && value !== null && value !== undefined) query.set(key, String(value));
   });
   return query.toString();
 }
 
 export function getWorks({ q = '', status = 'active', tag = '', page = 1, pageSize = 60 } = {}) {
-  const query = queryString({ q, status, tag, page, page_size: pageSize });
-  return apiFetch(`/api/works?${query}`);
+  return apiFetch(`/api/works?${queryString({ q, status, tag, page, page_size: pageSize })}`);
 }
-
-export function getWork(seriesId) {
-  return apiFetch(`/api/works/${encodeURIComponent(seriesId)}`);
-}
-
-export function getEpisodes(workId) {
-  return apiFetch(`/api/v1/works/${encodeURIComponent(workId)}/episodes`);
-}
-
-export function getStats() {
-  return apiFetch('/api/stats');
-}
-
-export function getStatus() {
-  return apiFetch('/api/status');
-}
-
-export function getTasks({ limit = 100 } = {}) {
-  return apiFetch(`/api/tasks?${queryString({ limit })}`);
-}
-
-export function getTask(taskId) {
-  return apiFetch(`/api/tasks/${encodeURIComponent(taskId)}`);
-}
-
-export function retryTask(taskId) {
-  return apiFetch(`/api/v1/tasks/${encodeURIComponent(taskId)}/retry`, { method: 'POST' });
-}
-
+export function getWork(seriesId) { return apiFetch(`/api/works/${encodeURIComponent(seriesId)}`); }
+export function getEpisodes(workId) { return apiFetch(`/api/v1/works/${encodeURIComponent(workId)}/episodes`); }
+export function getStats() { return apiFetch('/api/stats'); }
+export function getStatus() { return apiFetch('/api/status'); }
+export function getTasks({ limit = 100 } = {}) { return apiFetch(`/api/tasks?${queryString({ limit })}`); }
+export function getTask(taskId) { return apiFetch(`/api/tasks/${encodeURIComponent(taskId)}`); }
+export function retryTask(taskId) { return apiFetch(`/api/v1/tasks/${encodeURIComponent(taskId)}/retry`, { method: 'POST' }); }
 export function importCatalog(payload, source = 'novelquick') {
-  const query = queryString({ source });
-  return apiFetch(`/api/v1/imports/catalog?${query}`, {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  });
+  return apiFetch(`/api/v1/imports/catalog?${queryString({ source })}`, { method: 'POST', body: JSON.stringify(payload) });
+}
+export function queueSourceScrape(mode, source = 'novelquick') {
+  if (!['full', 'incremental'].includes(mode)) throw new ApiError(`不支持的抓取模式：${mode}`);
+  return apiFetch(`/api/v1/tasks/scrape/${mode}?${queryString({ source })}`, { method: 'POST' });
 }

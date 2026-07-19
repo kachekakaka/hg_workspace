@@ -1,14 +1,11 @@
 """Persistent SQLite task queue repository."""
-
 from __future__ import annotations
-
 import json
 import sqlite3
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
-
 from app.db import Database
 from app.models import TaskPage, TaskRead
 
@@ -78,6 +75,20 @@ class TaskRepository:
     def get_task(self, task_id: str) -> TaskRead | None:
         with self.database.connect() as connection:
             row = connection.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone()
+        return self._task_from_row(row) if row is not None else None
+
+    def get_active_task(self, task_type: str) -> TaskRead | None:
+        """Return the oldest pending/running task of a type, if one exists."""
+        with self.database.connect() as connection:
+            row = connection.execute(
+                """
+                SELECT * FROM tasks
+                WHERE type = ? AND status IN ('pending', 'running')
+                ORDER BY created_at ASC, id ASC
+                LIMIT 1
+                """,
+                (task_type.strip(),),
+            ).fetchone()
         return self._task_from_row(row) if row is not None else None
 
     def list_tasks(
@@ -191,8 +202,7 @@ class TaskRepository:
     def recover_running_tasks(self) -> int:
         now = _utc_now()
         result = json.dumps(
-            {"error": "service restarted while task was running"},
-            separators=(",", ":"),
+            {"error": "service restarted while task was running"}, separators=(",", ":")
         )
         with self.database.transaction() as connection:
             cursor = connection.execute(

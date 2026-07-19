@@ -12,46 +12,30 @@ HG Workspace 正在重构为一个简单、可审计的单仓库项目：
 
 ## 当前进度
 
-已合并：
+已经建立：
 
-- PR #1：Docker/FastAPI 基线、仓库卫生检查、旧工程审计和纯解析逻辑；
-- PR #2：版本化 SQLite、作品/分集 repository、正式 API 和旧 Web 只读兼容 API；
-- PR #3：旧 catalog 纯映射、SQLite 持久化任务、单线程 worker、retry 和启动恢复。
+- Docker/FastAPI 基线、仓库卫生和 secret 检查；
+- 版本化 SQLite、作品/分集 repository 和 API；
+- 旧 catalog 纯映射、持久化任务、retry 和启动恢复；
+- 原生静态作品、统计、任务与导入管理页；
+- `novelquick` 公开 SSR 作品元数据适配器；
+- 全量/增量发现任务和 Web 触发入口。
 
-当前批次增加原生静态管理页：
-
-- 作品分页、搜索、状态和标签过滤；
-- 作品详情和已入库分集展示；
-- 统计和后端状态；
-- 本机 catalog JSON 导入；
-- 任务历史、进度、结果和失败/中断重试；
-- 手机尺寸基础响应式布局；
-- 全部 HTML/CSS/JavaScript 随后端镜像部署，无 npm、Node 或外部 CDN。
-
-尚未接入全量/增量网络抓取、Cookie/Authorization、播放解析、Range 代理、媒体缓存、下载和 Android 客户端。
+仍未实现 Cookie/Authorization 播放解析、playback direct/proxy/cache、HTTP Range、媒体下载、Android APK 和真机测试。
 
 ## 宿主机要求
 
-必需：
+必需：Docker（含 Compose）、Git、编辑器。可选 `adb`。不要求安装 Android Studio、本机 JDK、本机 Android SDK、本机 Python、Qt、MSVC、CMake 或 Node。
 
-- Docker（含 Docker Compose）；
-- Git；
-- VS Code/Cursor 或其他编辑器。
-
-可选：`adb`，用于后续真机安装和调试。
-
-不要求安装 Android Studio、本机 JDK、本机 Android SDK、本机 Python、Qt、MSVC、CMake 或 Node。
-
-## 启动后端和管理页
+## 启动
 
 ```bash
 docker compose up --build backend
 ```
 
-打开：
-
 ```text
 管理页：http://localhost:8000/
+任务页：http://localhost:8000/tasks.html
 API 文档：http://localhost:8000/docs
 ```
 
@@ -61,81 +45,68 @@ API 文档：http://localhost:8000/docs
 curl --fail http://localhost:8000/health
 ```
 
-预期响应：
-
-```json
-{"status":"ok","service":"hg-backend"}
-```
-
-SQLite 默认保存在 Docker volume 的 `/data/hg.db`。任务 worker 默认启用：
+## 配置
 
 ```text
 HG_DATABASE=/data/hg.db
 HG_TASK_WORKER_ENABLED=true
 HG_TASK_POLL_INTERVAL=0.5
+HG_SOURCE_TIMEOUT=20
+HG_SOURCE_RETRIES=3
+HG_SOURCE_DELAY=0.15
 ```
+
+`HG_SOURCE_*` 只控制公开元数据请求的超时、重试和请求间隔。适配器固定使用 HTTPS 来源，不发送 Cookie 或 Authorization，并限制单响应大小和分类任务数量。
 
 ## Web 管理页面
 
-### 作品库
-
-`/` 提供：
-
-- 作品分页；
-- 剧名/简介搜索；
-- 状态和标签过滤；
-- 作品元数据详情；
-- 已导入分集列表。
+- `/`：作品分页、搜索、状态/标签过滤、详情和已入库分集；
+- `/stats.html`：作品统计和服务状态；
+- `/tasks.html`：增量/全量公开元数据发现、本地 catalog JSON 导入、任务历史、进度、结果和 retry。
 
 播放入口在 playback API 完成前不会显示。
 
-### 统计
+## 全量与增量发现
 
-`/stats.html` 显示：
-
-- 总作品数；
-- 上架与下架数量；
-- 后端版本和端口；
-- 每 30 秒自动刷新。
-
-### 任务与导入
-
-`/tasks.html` 支持：
-
-- 从浏览器选择本地 catalog JSON；
-- 指定稳定来源名；
-- 创建持久化 `catalog_import` 任务；
-- 查看 pending/running/completed/failed/interrupted；
-- 查看进度和导入结果；
-- retry 失败或中断任务。
-
-管理页文件限制为 20 MiB。超大 catalog 可使用 API 或拆分数据。该页面不会根据文件输入框路径让后端读取任意服务器文件。
-
-## 导入单部标准化作品
+增量任务：
 
 ```bash
-curl --fail --request POST http://localhost:8000/api/v1/works/import \
-  --header 'Content-Type: application/json' \
-  --data '{
-    "source": "manual",
-    "source_work_id": "demo-001",
-    "series_name": "测试作品",
-    "episode_count": 12
-  }'
+curl --fail --request POST \
+  'http://localhost:8000/api/v1/tasks/scrape/incremental?source=novelquick'
 ```
 
-规则：
+全量任务：
 
-- `(source, source_work_id)` 唯一，重复提交更新同一作品；
-- 缺省 `episodes` 时保留现有分集；
-- 此时可用 `episode_count` 保存来源声明的总集数；
-- 提供 `episodes` 数组时，该数组是权威快照，实际数组长度覆盖声明集数；
-- 空 `episodes` 数组清空分集；
-- 播放 URL 不作为永久作品数据保存。
+```bash
+curl --fail --request POST \
+  'http://localhost:8000/api/v1/tasks/scrape/full?source=novelquick'
+```
 
-## 通过 API 异步导入旧 catalog
+两者都返回 HTTP 202 和持久化任务 ID。查询：
 
-下列请求只解析 JSON 请求体，不会触发网络抓取：
+```bash
+curl --fail http://localhost:8000/api/v1/tasks/<task-id>
+```
+
+语义：
+
+- 增量发现读取首页、分类默认列表、最近时间筛选和最新排序；
+- 全量发现遍历官网 SSR 暴露的受支持分类筛选；
+- 发现结果直接转换成 `WorkImport` 并幂等写入 SQLite，不再写 checkpoint 主库；
+- 同一时间只允许一个 full/incremental 抓取任务；
+- 进程重启时 `running` 任务变为 `interrupted`，可 retry；
+- 本批次只保存作品元数据，不保存或解析播放地址。
+
+## 安全与内容边界
+
+内容源功能只适用于有权访问和保存的公开作品元数据。当前实现：
+
+- 不发送 Cookie、Authorization 或用户凭据；
+- 不解析或代理播放 URL；
+- 不绕过 DRM、付费、登录或其他访问控制；
+- 不恢复 Qt/C++、`catalog.pack`、手机伴侣、TV 内置服务器、mDNS 或 WebSocket 控制链路。
+
+## 旧 catalog 导入
 
 ```bash
 curl --fail --request POST \
@@ -144,27 +115,15 @@ curl --fail --request POST \
   --data-binary @catalog.json
 ```
 
-返回 HTTP 202 和任务 ID：
-
-```bash
-curl --fail http://localhost:8000/api/v1/tasks/<task-id>
-```
-
-支持的根结构：
-
-- 作品数组；
-- `{ "works": [...] }`；
-- `{ "works": { "series-id": {...} } }` checkpoint 映射。
-
-旧记录中的 `source` 往往是发现路径，不作为稳定来源键。调用方通过查询参数指定稳定适配器名，默认 `novelquick`。
+支持作品数组、`{"works": [...]}` 和 `{"works": {"series-id": {...}}}`。浏览器管理页限制 20 MiB；服务端不会根据文件输入框路径读取任意宿主机文件。
 
 ## 当前 API
-
-正式 API：
 
 ```text
 POST /api/v1/works/import
 POST /api/v1/imports/catalog
+POST /api/v1/tasks/scrape/full
+POST /api/v1/tasks/scrape/incremental
 GET  /api/v1/works
 GET  /api/v1/works/{id}
 GET  /api/v1/works/{id}/episodes
@@ -174,61 +133,33 @@ GET  /api/v1/tasks/{id}
 POST /api/v1/tasks/{id}/retry
 ```
 
-旧 Web 兼容 API：
+兼容入口：
 
 ```text
+POST /api/tasks/scrape/full
+POST /api/tasks/scrape/incremental
+POST /api/works/import
 GET  /api/works
 GET  /api/works/{series_id}
-POST /api/works/import
 GET  /api/stats
 GET  /api/status
 GET  /api/tasks
 GET  /api/tasks/{task_id}
 ```
 
-## 任务语义
-
-```text
-API 写入 pending
-→ worker 原子领取为 running
-→ 持续写入 progress/message
-→ completed 或 failed
-```
-
-进程重启时，旧 `running` 任务转为 `interrupted`，可通过 retry API 重新排队。catalog 导入按作品幂等写入；若批次中途停止，重试不会重复创建已导入作品。
-
-## 运行测试
+## 测试
 
 ```bash
 docker compose --profile test build backend-test
 docker compose --profile test run --rm backend-test
 ```
 
-GitHub Actions 还会运行仓库卫生、明显 secret、Python 编译、Compose 配置、Docker 构建和容器健康检查。
-
-## 当前目录
-
-```text
-.
-├── backend/
-│   ├── app/api/               # FastAPI 路由
-│   ├── app/migrations/        # 版本化 SQLite SQL
-│   ├── app/repositories/      # catalog 与 task repositories
-│   ├── app/services/          # 映射、worker 与其他服务逻辑
-│   ├── app/sources/           # 内容源纯解析器
-│   ├── app/static/            # 原生 Web 管理页
-│   └── tests/                 # fixture 和静态页面测试
-├── docs/                      # 架构、审计、计划和 ADR
-├── scripts/                   # 仓库级检查
-├── .github/workflows/ci.yml
-└── compose.yaml
-```
+CI 还运行仓库卫生、明显 secret、Python 编译、Compose 配置、Docker test/runtime image 和容器健康检查。内容源测试全部使用合成 SSR fixture，不在 CI 中访问第三方网络。
 
 ## 后续顺序
 
-1. 把全量/增量抓取改为内容源适配器输出 `WorkImport`，不再维护 checkpoint 主库；
-2. 实现抓取任务类型及 Web 触发端点；
-3. 为有权访问的内容实现 playback direct/proxy/cache；
-4. 实现 HTTP Range、媒体缓存和下载任务；
-5. 建立 Docker 化 Android 通用 APK；
-6. 实现在线播放、单集下载、离线播放和设备验证。
+1. 为有权访问的内容建立 playback provider 接口和短期解析结果；
+2. 实现 direct/proxy/cache、HTTP Range 和日志脱敏；
+3. 实现服务端媒体缓存与下载任务；
+4. 建立 Docker 化 Kotlin + Compose + Media3 通用 APK；
+5. 实现在线播放、单集下载、离线播放和手机/电视/华为 S65 验证。

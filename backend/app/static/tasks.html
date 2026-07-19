@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="HG Workspace 任务和本地 catalog 导入">
-  <title>任务与导入 · HG Workspace</title>
+  <meta name="description" content="HG Workspace 内容源任务和本地 catalog 导入">
+  <title>任务、抓取与导入 · HG Workspace</title>
   <link rel="stylesheet" href="/css/style.css">
 </head>
 <body>
@@ -19,10 +19,26 @@
   <main class="container">
     <header class="page-header">
       <div>
-        <h1>任务与本地 catalog 导入</h1>
-        <p>选择本机 JSON 文件后，浏览器把内容发送到后端。服务端不会根据表单路径读取任意文件，也不会触发第三方网络抓取。</p>
+        <h1>任务、公开元数据抓取与本地 catalog 导入</h1>
+        <p>抓取任务只访问已配置来源的公开 SSR 作品元数据；不发送 Cookie 或 Authorization，不解析播放地址，也不绕过付费、DRM 或访问控制。</p>
       </div>
     </header>
+
+    <section class="card">
+      <h2>内容源抓取</h2>
+      <div class="notice warning mt-12">只对你有权访问和保存的公开作品元数据运行。全量任务请求较多，同一时间只允许一个抓取任务。</div>
+      <div class="upload-grid mt-16">
+        <div class="field">
+          <label for="scrapeSourceInput">内容源</label>
+          <input id="scrapeSourceInput" class="input" type="text" value="novelquick" maxlength="128" required>
+        </div>
+        <div class="flex-row">
+          <button id="incrementalScrapeButton" class="btn btn-primary" type="button">增量发现</button>
+          <button id="fullScrapeButton" class="btn btn-default" type="button">全量发现</button>
+        </div>
+      </div>
+      <div id="scrapeMessage" class="status-line mt-12" aria-live="polite"></div>
+    </section>
 
     <section class="card">
       <h2>导入旧 catalog</h2>
