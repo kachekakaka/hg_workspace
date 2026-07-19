@@ -64,6 +64,7 @@ TEXT_SUFFIXES = {
     ".properties",
     ".py",
     ".sh",
+    ".sql",
     ".toml",
     ".txt",
     ".yaml",
