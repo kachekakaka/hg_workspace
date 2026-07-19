@@ -19,22 +19,36 @@ FORBIDDEN_DIRECTORY_NAMES = {
     "dist",
 }
 FORBIDDEN_TOP_LEVEL_DIRECTORIES = {"artifacts", "cache", "data", "downloads", "logs", "reports"}
-FORBIDDEN_FILE_NAMES = {".env", "local.properties"}
+FORBIDDEN_FILE_NAMES = {
+    ".env",
+    "credentials.json",
+    "id_ed25519",
+    "id_rsa",
+    "local.properties",
+    "secrets.json",
+}
 FORBIDDEN_SUFFIXES = {
+    ".7z",
     ".aab",
     ".apk",
     ".db",
     ".dll",
+    ".dylib",
     ".exe",
     ".idsig",
+    ".jks",
+    ".keystore",
     ".obj",
+    ".p12",
     ".pdb",
+    ".pfx",
     ".pyc",
     ".pyo",
+    ".rar",
+    ".so",
     ".sqlite",
     ".sqlite3",
-    ".so",
-    ".dylib",
+    ".zip",
 }
 TEXT_SUFFIXES = {
     "",
@@ -56,8 +70,12 @@ TEXT_SUFFIXES = {
     ".yml",
 }
 SECRET_PATTERNS = {
-    "GitHub token": re.compile(r"gh[pousr]_[A-Za-z0-9]{30,}"),
-    "AWS access key": re.compile(r"AKIA[0-9A-Z]{16}"),
+    "private key": re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----"),
+    "GitHub token": re.compile(
+        r"(?:gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{30,})"
+    ),
+    "AWS access key": re.compile(r"(?:AKIA|ASIA)[0-9A-Z]{16}"),
+    "Google API key": re.compile(r"AIza[0-9A-Za-z_-]{35}"),
     "Bearer token": re.compile(
         r"(?i)authorization\s*[:=]\s*bearer\s+[A-Za-z0-9._~+/=-]{16,}"
     ),
@@ -114,10 +132,10 @@ def main() -> int:
             errors.append(f"runtime/output directory is tracked: {relative}")
 
         if path.name in FORBIDDEN_FILE_NAMES:
-            errors.append(f"local configuration is tracked: {relative}")
+            errors.append(f"local configuration or secret file is tracked: {relative}")
 
         if path.suffix.lower() in FORBIDDEN_SUFFIXES:
-            errors.append(f"generated/binary artifact is tracked: {relative}")
+            errors.append(f"generated, archive, or sensitive artifact is tracked: {relative}")
 
         if path.stat().st_size > 1_000_000 or path.suffix.lower() not in TEXT_SUFFIXES:
             continue

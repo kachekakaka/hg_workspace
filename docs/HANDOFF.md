@@ -5,59 +5,59 @@
 
 ## 已验证的 Phase 1 起点
 
-在建立本分支前，GitHub 默认分支为 `main`，最新可验证提交为：
+建立本分支前，GitHub 默认分支为 `main`，最新可验证提交为：
 
 ```text
 be04662a13186f53c450c3429d3d45f0172f0d52
 ```
 
-当时仓库只正向验证到以下文件：
+当时仓库只包含：
 
 ```text
 docs/HG_REFACTOR_PLAN.md
 docs/NEXT_WINDOW_PROMPT.md
 ```
 
-根 `README.md` 不存在；未发现 PR；该提交没有可验证的 commit status，PR 触发的 workflow runs 也为空。
+根 `README.md` 不存在；未发现 PR；该提交没有可验证的 status checks。
 
-## 本分支范围
+## 本分支
 
-分支：`phase-1/repository-bootstrap`
+```text
+phase-1/repository-bootstrap
+```
 
-本分支只建立：
+本分支建立：
 
-- 根 README、忽略规则和开发入口；
-- Docker 化 FastAPI `/health` 骨架；
-- 最小单元测试；
+- 根 README、忽略规则和 Docker 开发入口；
+- FastAPI `/health` 骨架；
+- 单元测试；
 - 仓库卫生和明显 secret 检查；
-- 基础 GitHub Actions；
-- 架构决策记录。
+- GitHub Actions；
+- 架构决策、旧工程审计和详细 Review；
+- 两组经过重写与测试的纯迁移逻辑：视频质量选择、SSR 分集/播放器信息解析。
 
-## 旧源码迁移状态
+## 旧源码核验状态
 
-**未执行。** 当前聊天没有可供读取的 `hg_workspace(1).rar` 和 `HG_精简重构方案_Review.md` 原文件，因此：
+用户重新提供的文件已经读取：
 
-- 没有读取或迁移旧 Python、Web、Android、Qt/C++ 源码；
-- 没有对旧源码完成 secret scan；
-- 没有删除旧压缩包中的构建产物，因为这些内容尚未进入 GitHub；
-- 交接文档中描述的旧文件只作为后续调查线索。
+```text
+hg_workspace(3).rar
+SHA-256 a0b95437b120ec9ed57a61d5acc04dfa883f8b4362fac12b96f77be667e8bfbf
 
-在用户重新上传旧文件后，必须先生成清单、哈希和 secret scan 报告，再选择性迁移；不得把压缩包原样提交。
+HG_精简重构方案_Review(1).md
+SHA-256 b4cfdb9dae01e744f7586b7283dbd6f4a3129e358684b171d590b1e8314c1fed
+```
 
-## 本地作者环境验证
+已完成 RAR 元数据清单、生成物分类、敏感文件名扫描、明文凭据模式扫描和迁移矩阵。结果见 `docs/LEGACY_SOURCE_AUDIT.md`。
 
-本分支文件在一个独立临时目录中验证。作者环境没有 Docker，也无法直接解析 `github.com`，因此验证边界如下：
+重要边界：
 
-| 验证 | 状态 |
-|---|---|
-| `(cd backend && PYTHONDONTWRITEBYTECODE=1 python3 -m pytest -q -p no:cacheprovider)` | 通过：`1 passed in 0.68s` |
-| `PYTHONPYCACHEPREFIX=/tmp/hg_pycache python3 -m compileall -q backend/app backend/tests scripts` | 通过 |
-| `python3 scripts/check_repository.py` | 通过：`repository hygiene check passed` |
-| PyYAML 解析 `compose.yaml` 与 `.github/workflows/ci.yml` | 通过 |
-| 本机 Uvicorn + `GET /health` smoke test | 通过：HTTP 200，响应 `{"status":"ok","service":"hg-backend"}` |
-| `docker compose config` | 未运行：作者环境没有 Docker |
-| Docker image build / 容器内 health smoke test | 未运行：作者环境没有 Docker |
-| 旧源码 secret scan | 未运行：旧源码文件不可用 |
-| Android 构建或真机测试 | 不在本分支范围，未运行 |
+- 压缩包、旧 APK、DLL、EXE、日志和缓存没有提交；
+- 没有把“未命中正则”写成绝对安全保证；
+- Cookie/Authorization 相关代码没有进入生产路径；
+- 抓取、Web、Android 和 SQLite 业务仍未完成；
+- Qt/C++、手机伴侣、TV Server、mDNS、WebSocket 和 `catalog.pack` 明确不迁移。
 
-CI 的实际状态只能以 draft PR 创建后的 GitHub Actions 记录为准。
+## 验证要求
+
+每次后续报告都必须列出：branch、commit SHA、PR、修改文件、实际执行命令、结果、CI 状态和未解决问题。未执行或失败的验证不得写成成功。

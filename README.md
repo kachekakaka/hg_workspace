@@ -8,19 +8,24 @@ HG Workspace 正在重构为一个简单、可审计的单仓库项目：
 
 ## 代码权威源
 
-唯一代码权威源是 GitHub 仓库 `kachekakaka/hg_workspace`。只有 GitHub 文件、commit、branch、PR 和 CI 能证明工作已完成；聊天记录、本地压缩包和旧 APK 仅可作为迁移线索。
+唯一代码权威源是 GitHub 仓库 `kachekakaka/hg_workspace`。只有 GitHub 文件、commit、branch、PR 和 CI 能证明工作已完成；聊天记录、本地压缩包和旧 APK 仅可作为迁移输入。
 
 ## 当前阶段
 
-`phase-1/repository-bootstrap` 只建立可验证的仓库基础：
+`phase-1/repository-bootstrap` 建立可验证的仓库基础：
 
 - Docker 化 FastAPI `/health` 服务；
 - 最小自动化测试；
 - 仓库卫生与基础 secret 检查；
 - GitHub Actions；
-- 忽略规则和设计记录。
+- 旧工程归档审计和设计记录；
+- 从旧 Python 中选择性迁移无网络、无凭据的纯解析逻辑。
 
-旧工程源码尚未进入当前 GitHub 仓库。本阶段不会假装迁移了未提供的旧源码，也不会恢复 Qt/C++、`catalog.pack`、手机遥控伴侣、TV 内置服务器、mDNS 或 WebSocket 控制链路。
+旧压缩包没有原样进入仓库。当前只迁移了视频质量选择和 SSR 分集/播放器信息解析；抓取、Cookie 鉴权、Web 页面、Android UI 和播放/下载链路尚未接入。Qt/C++、`catalog.pack`、手机遥控伴侣、TV 内置服务器、mDNS 和 WebSocket 控制链路不会恢复。
+
+详细结果见：
+
+- [`docs/LEGACY_SOURCE_AUDIT.md`](docs/LEGACY_SOURCE_AUDIT.md)
 
 ## 宿主机要求
 
@@ -67,8 +72,11 @@ docker compose --profile test run --rm backend-test
 
 ```text
 .
-├── backend/                  # FastAPI 后端和测试
-├── docs/                     # 架构、计划与决策记录
+├── backend/
+│   ├── app/services/         # 纯服务层逻辑
+│   ├── app/sources/          # 内容源纯解析器；暂不含网络抓取
+│   └── tests/                # 后端单元测试
+├── docs/                     # 架构、审计、计划与决策记录
 ├── scripts/                  # 仓库级检查脚本
 ├── .github/workflows/ci.yml  # 基础 CI
 └── compose.yaml              # Docker 开发入口
@@ -76,9 +84,9 @@ docker compose --profile test run --rm backend-test
 
 ## 后续顺序
 
-1. 用户重新提供旧工程压缩包和详细 Review 文档；
-2. 对旧源码执行文件清单、secret scan 和选择性迁移；
-3. 建立 SQLite 数据模型与作品/分集 API；
-4. 迁移原生 Web 管理页面；
+1. 合并通过 CI 的 Phase 1 仓库基础；
+2. 建立 SQLite schema、repository 和版本化 SQL；
+3. 以 fixture 驱动方式迁移全量/增量抓取和导入逻辑；
+4. 实现作品、分集、任务和旧 Web 兼容 API，再迁移原生静态页面；
 5. 建立并 Docker 化 Android 通用 APK；
-6. 完成在线播放、下载、离线播放和设备验证。
+6. 完成授权内容的在线播放、下载、离线播放和设备验证。

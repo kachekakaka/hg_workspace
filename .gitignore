@@ -5,6 +5,8 @@
 local.properties
 *.keystore
 *.jks
+*.p12
+*.pfx
 
 # Python
 __pycache__/
@@ -51,6 +53,12 @@ captures/
 *.pdb
 *.so
 *.dylib
+
+# Legacy archives and migration inputs
+*.rar
+*.7z
+*.zip
+/legacy-input/
 
 # Editors and operating systems
 .idea/
