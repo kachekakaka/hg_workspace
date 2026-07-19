@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="HG Workspace 作品统计">
+  <title>统计 · HG Workspace</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <nav class="nav" aria-label="主导航">
+    <span class="brand">🍎 HG Workspace</span>
+    <a href="/">作品库</a>
+    <a href="/stats.html" class="active" aria-current="page">统计</a>
+    <a href="/tasks.html">任务与导入</a>
+    <a href="/docs">API 文档</a>
+  </nav>
+
+  <main class="container">
+    <header class="page-header">
+      <div>
+        <h1>作品库统计</h1>
+        <p>数据直接来自当前 SQLite 作品库，每 30 秒自动刷新。</p>
+      </div>
+      <button id="refreshButton" class="btn btn-default" type="button">刷新</button>
+    </header>
+
+    <section class="stats-grid" aria-label="作品统计">
+      <article class="stat-card">
+        <div id="statTotal" class="stat-value">--</div>
+        <div class="stat-label">总收录</div>
+      </article>
+      <article class="stat-card">
+        <div id="statActive" class="stat-value text-success">--</div>
+        <div class="stat-label">上架中</div>
+      </article>
+      <article class="stat-card">
+        <div id="statRemoved" class="stat-value text-danger">--</div>
+        <div class="stat-label">已下架</div>
+      </article>
+    </section>
+
+    <section class="card mt-16">
+      <div class="flex-row">
+        <h2>服务信息</h2>
+        <span class="spacer"></span>
+        <span id="lastUpdated" class="text-muted">--</span>
+      </div>
+      <div id="statusMessage" class="status-line mt-12" aria-live="polite">正在加载…</div>
+      <div class="table-scroll mt-8">
+        <table id="serviceTable" class="service-table hidden">
+          <tbody>
+            <tr><td>版本</td><td id="serviceVersion">--</td></tr>
+            <tr><td>HTTP 端口</td><td id="servicePort">--</td></tr>
+            <tr><td>作品总数</td><td id="serviceTotal">--</td></tr>
+            <tr><td>上架数</td><td id="serviceActive">--</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <script type="module" src="/js/stats.js"></script>
+</body>
+</html>
