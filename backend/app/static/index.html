@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="HG Workspace 作品管理页面">
+  <title>作品库 · HG Workspace</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <nav class="nav" aria-label="主导航">
+    <span class="brand">🍎 HG Workspace</span>
+    <a href="/" class="active" aria-current="page">作品库</a>
+    <a href="/stats.html">统计</a>
+    <a href="/tasks.html">任务与导入</a>
+    <a href="/docs">API 文档</a>
+  </nav>
+
+  <main class="container">
+    <header class="page-header">
+      <div>
+        <h1>作品库</h1>
+        <p>浏览 SQLite 中已经导入的作品。播放、缓存和下载功能将在后续批次接入。</p>
+      </div>
+      <div id="serviceStatus" class="status-line" aria-live="polite">正在检查服务…</div>
+    </header>
+
+    <section class="card" aria-label="作品筛选">
+      <form id="searchForm" class="toolbar">
+        <select id="statusFilter" class="select" aria-label="状态">
+          <option value="active">上架中</option>
+          <option value="removed">已下架</option>
+          <option value="">全部</option>
+        </select>
+        <input id="searchInput" class="input grow" type="search" maxlength="512" placeholder="搜索剧名或简介">
+        <input id="tagInput" class="input" type="search" maxlength="256" placeholder="标签（可选）">
+        <button class="btn btn-primary" type="submit">搜索</button>
+        <button class="btn btn-default" id="resetButton" type="button">重置</button>
+        <span class="spacer"></span>
+        <span id="totalLabel" class="text-muted">--</span>
+      </form>
+    </section>
+
+    <div id="message" class="status-line" aria-live="polite"></div>
+    <section id="worksGrid" class="works-grid" aria-label="作品列表"></section>
+    <nav id="pagination" class="pagination" aria-label="作品分页"></nav>
+  </main>
+
+  <div id="detailModal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="detailTitle">
+    <section class="modal">
+      <button id="modalClose" class="modal-close" type="button" aria-label="关闭">×</button>
+      <div id="detailContent"></div>
+    </section>
+  </div>
+
+  <script type="module" src="/js/index.js"></script>
+</body>
+</html>

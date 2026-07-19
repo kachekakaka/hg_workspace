@@ -11,42 +11,45 @@ Docker/FastAPI 基线、仓库卫生检查、旧工程审计、纯解析逻辑
 
 PR #2 -> main
 版本化 SQLite、作品/分集 repository、正式作品 API、旧 Web 只读兼容 API
+
+PR #3 -> main
+旧 catalog 纯映射、SQLite 持久化任务、单线程 worker、retry 和启动恢复
 ```
 
-PR #2 的 merge commit：
+PR #3 merge commit：
 
 ```text
-6f3749363ed5c30ce1e5d186cb9118381545c9bf
+3ffb59951d5540706345814c21f71f9a619b5a90
 ```
 
 ## 当前批次
 
-分支：`phase-2/catalog-import-tasks`
+分支：`phase-2/static-web-admin`
 
 实现范围：
 
-- 旧 catalog/checkpoint JSON 的纯映射；
-- 可选声明集数与实际分集快照语义；
-- SQLite 持久化任务 repository；
-- 单工作线程 worker；
-- `running -> interrupted` 启动恢复；
-- failed/interrupted retry；
-- catalog 异步导入；
-- 正式任务 API 与旧 Web 兼容任务读取接口。
+- FastAPI 同域托管原生静态管理页；
+- 作品分页、搜索、状态/标签过滤和详情；
+- 已入库分集展示；
+- 统计和服务状态；
+- 本地 catalog JSON 文件上传并创建持久化任务；
+- 任务进度、结果、失败/中断重试；
+- 手机尺寸的基础响应式布局；
+- 不引入 Node、npm、React、Vue 或远程 CDN。
 
-## 安全边界
+## 安全与真实性边界
 
-- catalog 导入只处理请求体中的本地 JSON；
-- 本批次没有第三方网络请求；
-- 没有迁移 Cookie、Authorization、播放地址解析或 probe 输出；
-- 没有把旧压缩包、APK、DLL、日志或本机路径提交到 GitHub；
-- 不绕过 DRM、付费或访问控制。
+- 管理页不显示尚未实现的网络抓取和 enrich 按钮；
+- 本地 JSON 由浏览器读取后作为请求体提交，后端不读取用户提供的服务器文件路径；
+- 动态作品字段使用 DOM 文本节点；封面和来源链接只允许 HTTP/HTTPS；
+- 本批次没有 Cookie/Authorization、播放、Range 代理、缓存、下载或 Android 实现；
+- 不恢复 Qt/C++、catalog.pack、手机伴侣、TV Server、mDNS 或 WebSocket。
 
 ## 仍未完成
 
-- 全量/增量抓取适配器和抓取任务；
-- 原生静态 Web 页面；
-- 播放 direct/proxy/cache、Range 和下载；
+- 全量/增量内容源适配器和抓取任务；
+- playback direct/proxy/cache 与 HTTP Range；
+- 服务端媒体缓存和下载；
 - Android 通用 APK、Docker Android builder 和真机测试。
 
 每次后续报告继续列出：branch、commit SHA、PR、修改文件、实际命令、结果、CI 和未解决问题。

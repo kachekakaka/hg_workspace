@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="HG Workspace 任务和本地 catalog 导入">
+  <title>任务与导入 · HG Workspace</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <nav class="nav" aria-label="主导航">
+    <span class="brand">🍎 HG Workspace</span>
+    <a href="/">作品库</a>
+    <a href="/stats.html">统计</a>
+    <a href="/tasks.html" class="active" aria-current="page">任务与导入</a>
+    <a href="/docs">API 文档</a>
+  </nav>
+
+  <main class="container">
+    <header class="page-header">
+      <div>
+        <h1>任务与本地 catalog 导入</h1>
+        <p>选择本机 JSON 文件后，浏览器把内容发送到后端。服务端不会根据表单路径读取任意文件，也不会触发第三方网络抓取。</p>
+      </div>
+    </header>
+
+    <section class="card">
+      <h2>导入旧 catalog</h2>
+      <div class="notice warning mt-12">仅导入你有权保存和管理的数据。压缩包、APK、Cookie、Token 和日志不应在此上传。</div>
+      <form id="importForm" class="upload-grid mt-16">
+        <div class="field">
+          <label for="sourceInput">稳定来源名</label>
+          <input id="sourceInput" class="input" type="text" value="novelquick" maxlength="128" required>
+        </div>
+        <div class="field">
+          <label for="catalogFile">catalog JSON（最大 20 MiB）</label>
+          <input id="catalogFile" class="file-input" type="file" accept="application/json,.json" required>
+        </div>
+        <button id="importButton" class="btn btn-primary" type="submit">创建导入任务</button>
+      </form>
+      <div id="importMessage" class="status-line mt-12" aria-live="polite"></div>
+    </section>
+
+    <section class="card">
+      <div class="flex-row">
+        <h2>任务历史</h2>
+        <span class="spacer"></span>
+        <button id="refreshButton" class="btn btn-default btn-small" type="button">刷新</button>
+      </div>
+      <div id="tasksMessage" class="status-line mt-12" aria-live="polite">正在加载…</div>
+      <div id="tasksContainer" class="table-scroll mt-8"></div>
+    </section>
+  </main>
+
+  <script type="module" src="/js/tasks.js"></script>
+</body>
+</html>
