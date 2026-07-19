@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "works": [
+    {
+      "series_id": "legacy-001",
+      "series_name": "合成旧作品一",
+      "series_cover": "https://example.invalid/cover-1.jpg",
+      "series_intro": "用于验证旧 catalog 映射。",
+      "episode_cnt": 12,
+      "episode_right_text": "全12集",
+      "tags": ["测试", "迁移"],
+      "celebrities": [{"nickname": "测试演员"}],
+      "source": "category:topic=测试",
+      "status": "active"
+    },
+    {
+      "series_id": "legacy-002",
+      "series_name": "合成旧作品二",
+      "tags": "测试, 已下架",
+      "status": "removed",
+      "vid_list": ["vid-1", "vid-2"]
+    }
+  ]
+}

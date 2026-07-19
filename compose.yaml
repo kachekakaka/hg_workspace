@@ -10,6 +10,8 @@ services:
       HG_DATA_DIR: ${HG_DATA_DIR:-/data}
       HG_DATABASE: ${HG_DATABASE:-/data/hg.db}
       HG_BACKEND_PORT: ${HG_BACKEND_PORT:-8000}
+      HG_TASK_WORKER_ENABLED: ${HG_TASK_WORKER_ENABLED:-true}
+      HG_TASK_POLL_INTERVAL: ${HG_TASK_POLL_INTERVAL:-0.5}
     ports:
       - "${HG_BACKEND_PORT:-8000}:8000"
     volumes:

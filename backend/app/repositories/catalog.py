@@ -94,7 +94,7 @@ class CatalogRepository:
                         source, source_work_id, series_name, series_cover, series_intro,
                         detail_url, episode_right_text, tags_json, celebrities_json,
                         episode_count, status, first_seen_at, last_seen_at, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         payload.source,
@@ -106,6 +106,7 @@ class CatalogRepository:
                         payload.episode_right_text,
                         tags_json,
                         celebrities_json,
+                        payload.episode_count or 0,
                         payload.status,
                         now,
                         now,
@@ -120,7 +121,8 @@ class CatalogRepository:
                     UPDATE works SET
                         series_name = ?, series_cover = ?, series_intro = ?,
                         detail_url = ?, episode_right_text = ?, tags_json = ?,
-                        celebrities_json = ?, status = ?, last_seen_at = ?, updated_at = ?
+                        celebrities_json = ?, episode_count = COALESCE(?, episode_count),
+                        status = ?, last_seen_at = ?, updated_at = ?
                     WHERE id = ?
                     """,
                     (
@@ -131,6 +133,7 @@ class CatalogRepository:
                         payload.episode_right_text,
                         tags_json,
                         celebrities_json,
+                        payload.episode_count,
                         payload.status,
                         now,
                         now,
