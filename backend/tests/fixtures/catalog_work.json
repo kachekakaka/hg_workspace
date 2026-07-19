@@ -1,0 +1,26 @@
+{
+  "source": "fixture",
+  "source_work_id": "fixture-001",
+  "series_name": "容器里的第一部短剧",
+  "series_cover": "https://example.invalid/fixture-001.jpg",
+  "series_intro": "用于验证 SQLite、分页、搜索和分集接口的合成数据。",
+  "detail_url": "https://example.invalid/detail?series_id=fixture-001",
+  "episode_right_text": "全 2 集",
+  "tags": ["测试", "喜剧", "测试"],
+  "celebrities": ["测试演员"],
+  "status": "active",
+  "episodes": [
+    {
+      "source_episode_id": "fixture-001-ep-1",
+      "episode_index": 1,
+      "title": "第一集",
+      "duration_ms": 61000
+    },
+    {
+      "source_episode_id": "fixture-001-ep-2",
+      "episode_index": 2,
+      "title": "第二集",
+      "duration_ms": 62000
+    }
+  ]
+}

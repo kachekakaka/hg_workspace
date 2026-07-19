@@ -1,7 +1,16 @@
 """FastAPI application entry point."""
 
+from __future__ import annotations
+
+from contextlib import asynccontextmanager
+from threading import Lock
+
 from fastapi import FastAPI
 from pydantic import BaseModel
+
+from app.api.works import router as works_router
+from app.config import Settings
+from app.dependencies import initialize_catalog_repository
 
 
 class HealthResponse(BaseModel):
@@ -11,19 +20,26 @@ class HealthResponse(BaseModel):
     service: str
 
 
-def create_app() -> FastAPI:
-    """Create the FastAPI application.
+def create_app(settings: Settings | None = None) -> FastAPI:
+    """Create the FastAPI application with explicit, testable settings."""
 
-    Keeping construction in a function makes tests independent and gives later
-    phases a clear place to register API routers and lifecycle hooks.
-    """
+    resolved_settings = settings or Settings.from_env()
+
+    @asynccontextmanager
+    async def lifespan(application: FastAPI):
+        initialize_catalog_repository(application)
+        yield
 
     application = FastAPI(
         title="HG Workspace Backend",
-        version="0.1.0",
+        version="0.2.0",
         docs_url="/docs",
         redoc_url=None,
+        lifespan=lifespan,
     )
+    application.state.settings = resolved_settings
+    application.state.catalog_repository_lock = Lock()
+    application.include_router(works_router)
 
     @application.get(
         "/health",
