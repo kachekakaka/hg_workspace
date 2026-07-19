@@ -1,15 +1,11 @@
 """FastAPI application entry point."""
-
 from __future__ import annotations
-
 from contextlib import asynccontextmanager
 from pathlib import Path
 from threading import Lock
-
 from fastapi import FastAPI
 from pydantic import BaseModel
 from starlette.staticfiles import StaticFiles
-
 from app.api.tasks import router as tasks_router
 from app.api.works import router as works_router
 from app.config import Settings
@@ -19,17 +15,14 @@ from app.dependencies import (
     initialize_task_worker,
 )
 
-
 class HealthResponse(BaseModel):
     """Stable response returned by the service health endpoint."""
-
     status: str
     service: str
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
     """Create the FastAPI application with explicit, testable settings."""
-
     resolved_settings = settings or Settings.from_env()
 
     @asynccontextmanager
@@ -47,7 +40,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     application = FastAPI(
         title="HG Workspace Backend",
-        version="0.4.0",
+        version="0.5.0",
         docs_url="/docs",
         redoc_url=None,
         lifespan=lifespan,
@@ -70,8 +63,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     static_dir = Path(__file__).with_name("static")
     application.mount("/", StaticFiles(directory=static_dir, html=True), name="web")
-
     return application
-
 
 app = create_app()

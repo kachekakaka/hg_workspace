@@ -1,18 +1,16 @@
-"""Persistent task and legacy catalog-import HTTP APIs."""
-
+"""Persistent task, source-scrape, and legacy catalog-import HTTP APIs."""
 from __future__ import annotations
-
 from typing import Annotated, Any, Literal
-
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
-
-from app.dependencies import get_task_repository
+from app.dependencies import get_task_repository, get_task_worker
 from app.models import TaskPage, TaskRead
 from app.repositories.tasks import TaskRepository
 from app.services.legacy_catalog import LegacyCatalogError, normalize_legacy_catalog
+from app.services.task_worker import TaskWorker
 
 router = APIRouter()
 TaskRepositoryDependency = Annotated[TaskRepository, Depends(get_task_repository)]
+TaskWorkerDependency = Annotated[TaskWorker, Depends(get_task_worker)]
 CatalogBody = Annotated[Any, Body(description="Legacy catalog list or object with a works field")]
 
 
@@ -36,6 +34,30 @@ def _queue_catalog_import(
     )
 
 
+def _queue_scrape(
+    mode: Literal["full", "incremental"],
+    *,
+    source: str,
+    repository: TaskRepository,
+    worker: TaskWorker,
+) -> TaskRead:
+    stable_source = source.strip().lower()
+    if stable_source not in worker.supported_sources:
+        supported = ", ".join(worker.supported_sources) or "none"
+        raise HTTPException(
+            status_code=422,
+            detail=f"unsupported source: {stable_source}; supported sources: {supported}",
+        )
+    for active_type in ("scrape_full", "scrape_incremental"):
+        active = repository.get_active_task(active_type)
+        if active is not None:
+            raise HTTPException(
+                status_code=409,
+                detail=f"scrape task already active: {active.task_id}",
+            )
+    return repository.create_task(f"scrape_{mode}", {"source": stable_source})
+
+
 @router.post(
     "/api/v1/imports/catalog",
     response_model=TaskRead,
@@ -48,6 +70,38 @@ def queue_catalog_import_v1(
     source: str = Query(default="novelquick", min_length=1, max_length=128),
 ) -> TaskRead:
     return _queue_catalog_import(payload, source=source, repository=repository)
+
+
+@router.post(
+    "/api/v1/tasks/scrape/full",
+    response_model=TaskRead,
+    status_code=status.HTTP_202_ACCEPTED,
+    tags=["sources", "tasks"],
+)
+def queue_full_scrape_v1(
+    repository: TaskRepositoryDependency,
+    worker: TaskWorkerDependency,
+    source: str = Query(default="novelquick", min_length=1, max_length=128),
+) -> TaskRead:
+    return _queue_scrape(
+        "full", source=source, repository=repository, worker=worker
+    )
+
+
+@router.post(
+    "/api/v1/tasks/scrape/incremental",
+    response_model=TaskRead,
+    status_code=status.HTTP_202_ACCEPTED,
+    tags=["sources", "tasks"],
+)
+def queue_incremental_scrape_v1(
+    repository: TaskRepositoryDependency,
+    worker: TaskWorkerDependency,
+    source: str = Query(default="novelquick", min_length=1, max_length=128),
+) -> TaskRead:
+    return _queue_scrape(
+        "incremental", source=source, repository=repository, worker=worker
+    )
 
 
 @router.get("/api/v1/tasks", response_model=TaskPage, tags=["tasks"])
@@ -98,6 +152,36 @@ def queue_catalog_import_legacy(
     source: str = Query(default="novelquick", min_length=1, max_length=128),
 ) -> TaskRead:
     return _queue_catalog_import(payload, source=source, repository=repository)
+
+
+@router.post(
+    "/api/tasks/scrape/full",
+    response_model=TaskRead,
+    status_code=status.HTTP_202_ACCEPTED,
+    tags=["legacy-web", "sources", "tasks"],
+)
+def queue_full_scrape_legacy(
+    repository: TaskRepositoryDependency,
+    worker: TaskWorkerDependency,
+    source: str = Query(default="novelquick", min_length=1, max_length=128),
+) -> TaskRead:
+    return _queue_scrape("full", source=source, repository=repository, worker=worker)
+
+
+@router.post(
+    "/api/tasks/scrape/incremental",
+    response_model=TaskRead,
+    status_code=status.HTTP_202_ACCEPTED,
+    tags=["legacy-web", "sources", "tasks"],
+)
+def queue_incremental_scrape_legacy(
+    repository: TaskRepositoryDependency,
+    worker: TaskWorkerDependency,
+    source: str = Query(default="novelquick", min_length=1, max_length=128),
+) -> TaskRead:
+    return _queue_scrape(
+        "incremental", source=source, repository=repository, worker=worker
+    )
 
 
 @router.get("/api/tasks", tags=["legacy-web"])

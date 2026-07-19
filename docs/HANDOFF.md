@@ -6,50 +6,46 @@
 ## 已合并基线
 
 ```text
-PR #1 -> main
-Docker/FastAPI 基线、仓库卫生检查、旧工程审计、纯解析逻辑
-
-PR #2 -> main
-版本化 SQLite、作品/分集 repository、正式作品 API、旧 Web 只读兼容 API
-
-PR #3 -> main
-旧 catalog 纯映射、SQLite 持久化任务、单线程 worker、retry 和启动恢复
+PR #1  Docker/FastAPI 基线、旧工程审计和纯解析逻辑
+PR #2  SQLite 作品/分集目录与 API
+PR #3  旧 catalog 映射、持久化任务和 worker
+PR #4  FastAPI 同域原生静态管理页
 ```
 
-PR #3 merge commit：
+本批次基线：
 
 ```text
-3ffb59951d5540706345814c21f71f9a619b5a90
+main @ c1859c19c97bcd5cdd06c1aaf8bdc016e81c13c5
 ```
 
 ## 当前批次
 
-分支：`phase-2/static-web-admin`
+分支：`phase-2/source-tasks`
 
-实现范围：
+范围：
 
-- FastAPI 同域托管原生静态管理页；
-- 作品分页、搜索、状态/标签过滤和详情；
-- 已入库分集展示；
-- 统计和服务状态；
-- 本地 catalog JSON 文件上传并创建持久化任务；
-- 任务进度、结果、失败/中断重试；
-- 手机尺寸的基础响应式布局；
-- 不引入 Node、npm、React、Vue 或远程 CDN。
+- `novelquick` 公开 SSR 作品元数据适配器；
+- HTTPS 同源、超时、重试、8 MiB 响应和最多 200 个分类任务限制；
+- full/incremental 持久化任务；
+- 任务进度、失败持久化、retry 和重复抓取防护；
+- 正式和旧 Web 兼容的抓取触发 API；
+- `/tasks.html` 全量/增量触发按钮；
+- 合成 SSR fixture、任务闭环、配置和静态页面测试。
 
-## 安全与真实性边界
+## 设计边界
 
-- 管理页不显示尚未实现的网络抓取和 enrich 按钮；
-- 本地 JSON 由浏览器读取后作为请求体提交，后端不读取用户提供的服务器文件路径；
-- 动态作品字段使用 DOM 文本节点；封面和来源链接只允许 HTTP/HTTPS；
-- 本批次没有 Cookie/Authorization、播放、Range 代理、缓存、下载或 Android 实现；
-- 不恢复 Qt/C++、catalog.pack、手机伴侣、TV Server、mDNS 或 WebSocket。
+- 只读取公开 SSR 作品元数据；
+- 不发送 Cookie、Authorization 或凭据；
+- 不解析播放地址，不绕过 DRM、付费、登录或访问控制；
+- 不写 checkpoint JSON 主库，结果直接幂等写入 SQLite；
+- CI 不访问第三方网络；真实来源可用性仍需部署环境手动验证；
+- 不恢复 Qt/C++、`catalog.pack`、手机伴侣、TV Server、mDNS 或 WebSocket。
 
 ## 仍未完成
 
-- 全量/增量内容源适配器和抓取任务；
-- playback direct/proxy/cache 与 HTTP Range；
-- 服务端媒体缓存和下载；
-- Android 通用 APK、Docker Android builder 和真机测试。
+- playback provider、短期 URL/headers/expiry；
+- direct/proxy/cache 和 HTTP Range；
+- 服务端媒体缓存和下载任务；
+- Android 通用 APK、Docker Android builder、Media3 和真机测试。
 
-每次后续报告继续列出：branch、commit SHA、PR、修改文件、实际命令、结果、CI 和未解决问题。
+每次后续报告必须继续列出 branch、commit SHA、PR、修改文件、实际命令、结果、CI 和未解决问题。
