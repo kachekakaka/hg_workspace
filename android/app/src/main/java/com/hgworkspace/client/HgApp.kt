@@ -100,6 +100,8 @@ fun HgApp(viewModel: MainViewModel, isTv: Boolean) {
                 selectedWork = selectedWork,
                 isTv = isTv,
                 modifier = Modifier.padding(innerPadding),
+                onResolvePlayback = viewModel::resolvePlayback,
+                onClearPlayback = viewModel::clearPlaybackCheck,
             )
         }
     }
@@ -180,6 +182,8 @@ private fun WorkDetailsScreen(
     selectedWork: WorkSummary,
     isTv: Boolean,
     modifier: Modifier = Modifier,
+    onResolvePlayback: (EpisodeSummary) -> Unit,
+    onClearPlayback: () -> Unit,
 ) {
     var selectedEpisode by remember(selectedWork.id) { mutableStateOf<EpisodeSummary?>(null) }
     val detail = state.workDetail
@@ -200,7 +204,10 @@ private fun WorkDetailsScreen(
                 state = state,
                 isTv = true,
                 modifier = Modifier.weight(1f),
-                onEpisodeClick = { selectedEpisode = it },
+                onEpisodeClick = { episode ->
+                    onClearPlayback()
+                    selectedEpisode = episode
+                },
             )
         }
     } else {
@@ -219,16 +226,39 @@ private fun WorkDetailsScreen(
                 state = state,
                 isTv = false,
                 modifier = Modifier.weight(1f),
-                onEpisodeClick = { selectedEpisode = it },
+                onEpisodeClick = { episode ->
+                    onClearPlayback()
+                    selectedEpisode = episode
+                },
             )
         }
     }
 
     selectedEpisode?.let { episode ->
+        val source = state.workDetail?.source.orEmpty()
+        val providerConfigured = source.isNotBlank() && source in state.playbackSources
+        val closeDialog = {
+            onClearPlayback()
+            selectedEpisode = null
+        }
         AlertDialog(
-            onDismissRequest = { selectedEpisode = null },
+            onDismissRequest = closeDialog,
             confirmButton = {
-                TextButton(onClick = { selectedEpisode = null }) { Text("关闭") }
+                if (providerConfigured) {
+                    TextButton(
+                        onClick = { onResolvePlayback(episode) },
+                        enabled = !state.playbackLoading,
+                    ) {
+                        Text(if (state.playbackLoading) "检查中" else "检查播放能力")
+                    }
+                } else {
+                    TextButton(onClick = closeDialog) { Text("关闭") }
+                }
+            },
+            dismissButton = {
+                if (providerConfigured) {
+                    TextButton(onClick = closeDialog) { Text("关闭") }
+                }
             },
             title = { Text(episode.title.ifBlank { "第 ${episode.episodeIndex} 集" }) },
             text = {
@@ -236,7 +266,36 @@ private fun WorkDetailsScreen(
                     Text("第 ${episode.episodeIndex} 集")
                     Text("来源分集 ID：${episode.sourceEpisodeId}")
                     episode.durationMs?.let { Text("时长：${formatDuration(it)}") }
-                    Text("播放与下载将在后续批次接入。")
+                    if (!providerConfigured) {
+                        Text("后端未配置 ${source.ifBlank { "该来源" }} 的播放 provider。")
+                    }
+                    if (state.playbackLoading) {
+                        Text("正在向后端检查短期播放解析…")
+                    }
+                    if (state.playbackError.isNotBlank()) {
+                        Text(state.playbackError, color = MaterialTheme.colorScheme.error)
+                    }
+                    state.playbackResolution
+                        ?.takeIf { it.episodeId == episode.id }
+                        ?.let { resolution ->
+                            when (resolution.delivery) {
+                                PlaybackDelivery.DIRECT -> Text(
+                                    "后端已返回 direct 短期 HTTPS 地址。Media3 播放器尚未接入。"
+                                )
+                                PlaybackDelivery.EXTERNAL_PROXY_REQUIRED -> Text(
+                                    "该分集需要 NAS external_proxy_required handoff；当前尚未配置。"
+                                )
+                            }
+                            Text(
+                                "provider：${resolution.provider} · ${if (resolution.cached) "缓存命中" else "新解析"}",
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                            if (resolution.mimeType.isNotBlank()) {
+                                Text("类型：${resolution.mimeType}", style = MaterialTheme.typography.bodySmall)
+                            }
+                            Text("过期：${resolution.expiresAt}", style = MaterialTheme.typography.bodySmall)
+                        }
+                    Text("本批次只检查交付契约，不启动播放器或下载。")
                 }
             },
         )

@@ -51,11 +51,27 @@ data class EpisodeSummary(
 data class HomePayload(
     val status: BackendStatus,
     val works: List<WorkSummary>,
+    val playbackSources: Set<String>,
 )
 
 data class WorkDetailsPayload(
     val work: WorkDetail,
     val episodes: List<EpisodeSummary>,
+)
+
+enum class PlaybackDelivery {
+    DIRECT,
+    EXTERNAL_PROXY_REQUIRED,
+}
+
+data class PlaybackResolution(
+    val episodeId: Long,
+    val provider: String,
+    val delivery: PlaybackDelivery,
+    val url: String?,
+    val mimeType: String,
+    val expiresAt: String,
+    val cached: Boolean,
 )
 
 class InvalidServerUrlException(message: String) : IllegalArgumentException(message)
@@ -205,6 +221,75 @@ object BackendJsonParser {
         }.sortedWith(compareBy(EpisodeSummary::episodeIndex, EpisodeSummary::id))
     }
 
+    fun parsePlaybackProviders(raw: String): Set<String> {
+        val root = JSONObject(raw)
+        return stringList(root.optJSONArray("sources"))
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .toSet()
+    }
+
+    fun parsePlayback(raw: String, expectedEpisodeId: Long): PlaybackResolution {
+        val item = JSONObject(raw)
+        val episodeId = item.optLong("episode_id", -1)
+        if (episodeId != expectedEpisodeId) {
+            throw BackendApiException("播放响应与当前分集身份不一致")
+        }
+        val provider = item.optString("provider").trim()
+        if (provider.isEmpty()) throw BackendApiException("播放响应缺少 provider")
+        val delivery = when (item.optString("delivery")) {
+            "direct" -> PlaybackDelivery.DIRECT
+            "external_proxy_required" -> PlaybackDelivery.EXTERNAL_PROXY_REQUIRED
+            else -> throw BackendApiException("播放响应包含未知 delivery")
+        }
+        val rawUrl = if (item.has("url") && !item.isNull("url")) {
+            item.optString("url").trim().ifEmpty { null }
+        } else {
+            null
+        }
+        val url = when (delivery) {
+            PlaybackDelivery.DIRECT -> validateDirectPlaybackUrl(rawUrl)
+            PlaybackDelivery.EXTERNAL_PROXY_REQUIRED -> {
+                if (rawUrl != null) {
+                    throw BackendApiException("外部代理响应不得暴露来源 URL")
+                }
+                null
+            }
+        }
+        val mimeType = item.optString("mime_type").trim()
+        if (mimeType.length > 255 || mimeType.contains('\r') || mimeType.contains('\n')) {
+            throw BackendApiException("播放响应包含无效 MIME 类型")
+        }
+        val expiresAt = item.optString("expires_at").trim()
+        if (expiresAt.isEmpty()) throw BackendApiException("播放响应缺少过期时间")
+        return PlaybackResolution(
+            episodeId = episodeId,
+            provider = provider,
+            delivery = delivery,
+            url = url,
+            mimeType = mimeType,
+            expiresAt = expiresAt,
+            cached = item.optBoolean("cached", false),
+        )
+    }
+
+    private fun validateDirectPlaybackUrl(raw: String?): String {
+        val url = raw ?: throw BackendApiException("direct 播放响应缺少 URL")
+        if (url.length > 8192) throw BackendApiException("播放 URL 超过大小限制")
+        val uri = try {
+            URI(url)
+        } catch (error: Exception) {
+            throw BackendApiException("播放 URL 格式无效", error)
+        }
+        if (uri.scheme?.lowercase() != "https" || uri.host.isNullOrBlank()) {
+            throw BackendApiException("direct 播放 URL 必须使用 HTTPS")
+        }
+        if (uri.userInfo != null || uri.fragment != null) {
+            throw BackendApiException("direct 播放 URL 包含不安全字段")
+        }
+        return url
+    }
+
     private fun episodeCount(item: JSONObject): Int = if (item.has("episode_cnt")) {
         item.optInt("episode_cnt", 0)
     } else {
@@ -248,7 +333,10 @@ class BackendApiClient(
         val works = BackendJsonParser.parseWorks(
             get(baseUrl, "/api/works?page=1&page_size=60&status=active")
         )
-        return HomePayload(status, works)
+        val playbackSources = BackendJsonParser.parsePlaybackProviders(
+            get(baseUrl, "/api/v1/playback/providers")
+        )
+        return HomePayload(status, works, playbackSources)
     }
 
     fun loadWorkDetails(baseUrl: String, work: WorkSummary): WorkDetailsPayload {
@@ -267,27 +355,41 @@ class BackendApiClient(
         return WorkDetailsPayload(detail, episodes)
     }
 
-    private fun get(baseUrl: String, path: String): String {
+    fun resolvePlayback(baseUrl: String, episodeId: Long): PlaybackResolution {
+        val raw = request(baseUrl, "/api/v1/episodes/$episodeId/playback/resolve", "POST")
+        return BackendJsonParser.parsePlayback(raw, episodeId)
+    }
+
+    private fun get(baseUrl: String, path: String): String = request(baseUrl, path, "GET")
+
+    private fun request(baseUrl: String, path: String, method: String): String {
         val connection = try {
             (URI.create(baseUrl + path).toURL().openConnection() as HttpURLConnection).apply {
-                requestMethod = "GET"
+                requestMethod = method
                 connectTimeout = connectTimeoutMs
                 readTimeout = readTimeoutMs
                 instanceFollowRedirects = false
                 setRequestProperty("Accept", "application/json")
-                setRequestProperty("User-Agent", "HGClient/0.2")
+                setRequestProperty("User-Agent", "HGClient/0.3")
+                if (method == "POST") {
+                    doOutput = true
+                    setFixedLengthStreamingMode(0)
+                }
             }
         } catch (error: Exception) {
             throw BackendApiException("无法创建后端连接", error)
         }
         return try {
+            if (method == "POST") connection.outputStream.use { }
             val code = connection.responseCode
             val stream = if (code in 200..299) connection.inputStream else connection.errorStream
             val body = stream?.use { input ->
                 BufferedInputStream(input).readLimited(maxResponseBytes)
             }.orEmpty()
             if (code !in 200..299) {
-                throw BackendApiException("后端请求失败（HTTP $code）")
+                val detail = try { JSONObject(body).optString("detail").trim() } catch (_: Exception) { "" }
+                val suffix = if (detail.isBlank()) "" else "：$detail"
+                throw BackendApiException("后端请求失败（HTTP $code）$suffix")
             }
             body
         } catch (error: BackendApiException) {

@@ -27,6 +27,10 @@ data class MainUiState(
     val episodes: List<EpisodeSummary> = emptyList(),
     val detailLoading: Boolean = false,
     val detailError: String = "",
+    val playbackSources: Set<String> = emptySet(),
+    val playbackLoading: Boolean = false,
+    val playbackResolution: PlaybackResolution? = null,
+    val playbackError: String = "",
 )
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
@@ -36,6 +40,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val state: StateFlow<MainUiState> = _state.asStateFlow()
     private var loadJob: Job? = null
     private var detailJob: Job? = null
+    private var playbackJob: Job? = null
 
     init {
         if (_state.value.serverInput.isNotBlank()) connect()
@@ -55,6 +60,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         settings.saveServerUrl(normalized)
         loadJob?.cancel()
         detailJob?.cancel()
+        playbackJob?.cancel()
         loadJob = viewModelScope.launch {
             _state.update {
                 it.copy(
@@ -67,6 +73,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     episodes = emptyList(),
                     detailLoading = false,
                     detailError = "",
+                    playbackSources = emptySet(),
+                    playbackLoading = false,
+                    playbackResolution = null,
+                    playbackError = "",
                 )
             }
             try {
@@ -76,6 +86,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         loading = false,
                         status = payload.status,
                         works = payload.works,
+                        playbackSources = payload.playbackSources,
                         error = "",
                     )
                 }
@@ -87,6 +98,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         loading = false,
                         status = null,
                         works = emptyList(),
+                        playbackSources = emptySet(),
                         error = error.message ?: "连接后端失败",
                     )
                 }
@@ -101,6 +113,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
         detailJob?.cancel()
+        playbackJob?.cancel()
         _state.update {
             it.copy(
                 selectedWork = work,
@@ -108,6 +121,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 episodes = emptyList(),
                 detailLoading = true,
                 detailError = "",
+                playbackLoading = false,
+                playbackResolution = null,
+                playbackError = "",
             )
         }
         detailJob = viewModelScope.launch {
@@ -138,6 +154,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun closeWork() {
         detailJob?.cancel()
+        playbackJob?.cancel()
         _state.update {
             it.copy(
                 selectedWork = null,
@@ -145,6 +162,61 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 episodes = emptyList(),
                 detailLoading = false,
                 detailError = "",
+                playbackLoading = false,
+                playbackResolution = null,
+                playbackError = "",
+            )
+        }
+    }
+
+    fun resolvePlayback(episode: EpisodeSummary) {
+        val baseUrl = _state.value.normalizedServerUrl
+        val source = _state.value.workDetail?.source.orEmpty()
+        if (source !in _state.value.playbackSources) {
+            _state.update { it.copy(playbackError = "后端未配置该来源的播放 provider") }
+            return
+        }
+        playbackJob?.cancel()
+        playbackJob = viewModelScope.launch {
+            _state.update {
+                it.copy(
+                    playbackLoading = true,
+                    playbackResolution = null,
+                    playbackError = "",
+                )
+            }
+            try {
+                val resolution = withContext(Dispatchers.IO) {
+                    api.resolvePlayback(baseUrl, episode.id)
+                }
+                _state.update { current ->
+                    if (current.selectedWork?.id != episode.workId) current else current.copy(
+                        playbackLoading = false,
+                        playbackResolution = resolution,
+                        playbackError = "",
+                    )
+                }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                _state.update { current ->
+                    if (current.selectedWork?.id != episode.workId) current else current.copy(
+                        playbackLoading = false,
+                        playbackResolution = null,
+                        playbackError = error.message ?: "播放能力检查失败",
+                    )
+                }
+            }
+        }
+    }
+
+    fun clearPlaybackCheck() {
+        playbackJob?.cancel()
+        _state.update {
+            it.copy(
+                playbackLoading = false,
+                playbackResolution = null,
+                playbackError = "",
             )
         }
     }
