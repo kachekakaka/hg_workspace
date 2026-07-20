@@ -31,7 +31,7 @@ def test_api_and_openapi_routes_take_precedence_over_static_mount(tmp_path) -> N
         assert client.get("/health").json() == {"status": "ok", "service": "hg-backend"}
         status = client.get("/api/status")
         assert status.status_code == 200
-        assert status.json()["version"] == "0.7.0"
+        assert status.json()["version"] == "0.7.1"
         schema = client.get("/openapi.json")
         assert schema.status_code == 200
         paths = schema.json()["paths"]
@@ -56,5 +56,5 @@ def test_admin_ui_exposes_only_implemented_source_actions(tmp_path) -> None:
         assert "DRM" in combined
         assert "刷新公开详情与分集" in combined
         # The contract exists, but the Web player remains hidden until a real
-        # provider and proxy/direct delivery path are implemented.
+        # provider and direct/NAS delivery path are implemented.
         assert "/playback/resolve" not in combined

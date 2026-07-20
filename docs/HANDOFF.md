@@ -1,6 +1,6 @@
 # 当前交接与核验状态
 
-核验日期：2026-07-19
+核验日期：2026-07-20
 唯一权威仓库：`kachekakaka/hg_workspace`
 
 ## 已合并基线
@@ -12,43 +12,51 @@ PR #3  旧 catalog 映射、持久化任务和 worker
 PR #4  FastAPI 同域原生静态管理页
 PR #5  公开 SSR 全量/增量发现任务
 PR #6  公开详情与分集 enrichment
+PR #7  provider-neutral playback 解析契约与短期缓存
 ```
 
 本批次基线：
 
 ```text
-main @ a5d757a04a7a98137c783a854b7be718d0e2a6af
+main @ 7b15ff9889d05a98b7ac8ce038c37208b077d23f
 ```
 
 ## 当前批次
 
-分支：`phase-2/playback-contract`
+分支：`agent/nas-proxy-boundary`
 
 范围：
 
-- provider-neutral `PlaybackProvider` / `PlaybackCandidate` 契约；
-- `0002_playback_resolutions.sql` 短期解析缓存；
-- HTTPS、URL 凭据、header、expiry、provider 名称和 TTL 校验；
-- direct / proxy_required 两种交付声明；
-- 解析、读取缓存、失效和 provider 列表 API；
-- 默认生产 provider registry 为空；
-- 合成 provider 测试，确保 headers 不进入 API 响应、异常不泄露 provider 内部信息。
+- 将带服务端 headers 的交付声明从 `proxy_required` 改为 `external_proxy_required`；
+- 明确媒体代理、TLS、域名和公网入口由用户 NAS 负责；
+- 后端不实现 `/stream`、`/proxy`、HTTP Range 或媒体字节转发；
+- direct 仍只允许 HTTPS、无 headers、provider 显式允许的短期 URL；
+- 更新 API 模型、服务测试、README、重构计划和 ADR；
+- 后端版本更新为 `0.7.1`。
 
 ## 设计边界
 
-- 本批次不迁移旧 Cookie/Authorization 解析脚本；
-- 不注册任何第三方生产 playback provider；
-- 不实现 proxy、HTTP Range、缓存下载或 Web 播放按钮；
-- 含 provider headers 的结果只标记 `proxy_required`，不会返回 URL 或 headers；
-- direct 仅允许 HTTPS、无 headers、provider 显式允许的短期 URL；
-- CI 不访问第三方网络，不证明任何真实来源可播放；
+- 后端继续保存短期解析结果，但不向 Android 暴露 provider headers；
+- `external_proxy_required` 只是能力声明，在 NAS 对接协议定义前不可直接播放；
+- 本仓库不固定公网 IP，不实现 DNS pinning 代理，也不转发视频字节；
+- NAS 代理不是 TV 内置服务器，也不恢复旧 LAN Server/WebSocket 架构；
+- 不注册任何未经授权的生产 playback provider；
 - 不绕过 DRM、付费、登录或访问控制。
+
+## 下一批
+
+优先建立 Docker 化 Android 通用工程：
+
+- 单一 app module；
+- 手机 Launcher + TV Leanback Launcher；
+- `leanback required=false`、`touchscreen required=false`；
+- 手动配置后端/NAS 服务地址；
+- 先实现作品、详情和分集浏览，不伪造播放或下载完成状态。
 
 ## 仍未完成
 
 - 授权来源的生产 playback provider；
-- proxy、HTTP Range、header 注入和日志脱敏；
-- 服务端媒体缓存、下载任务和配额；
-- Android 通用 APK、Docker Android builder、Media3 和真机测试。
+- NAS 外部代理对接协议；
+- Android 通用 APK、Docker Android builder、Media3、设备端下载和真机测试。
 
 每次后续报告必须继续列出 branch、commit SHA、PR、修改文件、实际命令、结果、CI 和未解决问题。

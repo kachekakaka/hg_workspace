@@ -146,7 +146,7 @@ class TaskPage(BaseModel):
     offset: int
 
 
-PlaybackDelivery = Literal["direct", "proxy_required"]
+PlaybackDelivery = Literal["direct", "external_proxy_required"]
 
 
 class PlaybackRead(BaseModel):

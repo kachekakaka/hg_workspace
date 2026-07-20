@@ -14,7 +14,12 @@ class FakeProvider:
     name = "synthetic-direct"
     source = "manual"
 
-    def __init__(self, *, headers: dict[str, str] | None = None, url: str = "https://media.example.test/video.mp4") -> None:
+    def __init__(
+        self,
+        *,
+        headers: dict[str, str] | None = None,
+        url: str = "https://media.example.test/video.mp4",
+    ) -> None:
         self.headers = headers or {}
         self.url = url
         self.calls = 0
@@ -116,7 +121,7 @@ def test_direct_resolution_is_cached_and_can_be_invalidated(tmp_path) -> None:
         assert client.get(f"/api/v1/episodes/{episode_id}/playback").status_code == 404
 
 
-def test_headers_stay_server_side_and_require_future_proxy(tmp_path) -> None:
+def test_headers_stay_server_side_and_require_external_proxy(tmp_path) -> None:
     app = _app(tmp_path)
     with TestClient(app) as client:
         episode_id = _create_episode(client)
@@ -126,7 +131,7 @@ def test_headers_stay_server_side_and_require_future_proxy(tmp_path) -> None:
 
         response = client.post(f"/api/v1/episodes/{episode_id}/playback/resolve")
         assert response.status_code == 200
-        assert response.json()["delivery"] == "proxy_required"
+        assert response.json()["delivery"] == "external_proxy_required"
         assert response.json()["url"] is None
         assert "temporary-value" not in response.text
 
@@ -134,6 +139,10 @@ def test_headers_stay_server_side_and_require_future_proxy(tmp_path) -> None:
         assert stored is not None
         assert stored.headers == {"X-Provider-Session": "temporary-value"}
         assert stored.source_url == "https://media.example.test/video.mp4"
+
+        openapi_paths = client.get("/openapi.json").json()["paths"]
+        assert not any("/stream" in path or "/proxy" in path for path in openapi_paths)
+        assert client.get(f"/api/v1/episodes/{episode_id}/stream").status_code == 404
 
 
 def test_missing_provider_episode_and_invalid_candidate_have_clear_errors(tmp_path) -> None:
@@ -148,7 +157,9 @@ def test_missing_provider_episode_and_invalid_candidate_have_clear_errors(tmp_pa
         assert "not configured" in unavailable.json()["detail"]
 
         service = initialize_playback_service(client.app)
-        service.providers = {"manual": FakeProvider(url="http://media.example.test/video.mp4")}
+        service.providers = {
+            "manual": FakeProvider(url="http://media.example.test/video.mp4")
+        }
         invalid = client.post(f"/api/v1/episodes/{episode_id}/playback/resolve")
         assert invalid.status_code == 502
         assert "non-HTTPS" in invalid.json()["detail"]
