@@ -47,5 +47,17 @@ services:
       target: test
     command: ["python", "-m", "pytest", "-q"]
 
+  android-builder:
+    profiles: ["build"]
+    build:
+      context: .
+      dockerfile: docker/android-builder.Dockerfile
+    working_dir: /workspace/android
+    volumes:
+      - ./:/workspace
+      - gradle_cache:/root/.gradle
+    command: ["/workspace/scripts/build-android-in-container.sh"]
+
 volumes:
   hg_data:
+  gradle_cache:
