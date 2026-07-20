@@ -65,3 +65,44 @@ jobs:
 
           echo "backend did not become healthy" >&2
           exit 1
+
+  android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Build Android SDK image
+        run: docker build --file docker/android-builder.Dockerfile --tag hg-android-builder .
+
+      - name: Run JVM tests and assemble Debug APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --rm \
+            --volume "${{ github.workspace }}:/workspace" \
+            --volume hg-gradle-cache:/root/.gradle \
+            --workdir /workspace/android \
+            hg-android-builder \
+            /workspace/scripts/build-android-in-container.sh 2>&1 | tee android-build.log
+
+      - name: Upload Android build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-build-log
+          path: android-build.log
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Verify Debug APK
+        run: test -s dist/hg-client-debug.apk
+
+      - name: Upload Debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: hg-client-debug
+          path: dist/hg-client-debug.apk
+          if-no-files-found: error
+          retention-days: 14
