@@ -3,6 +3,7 @@ package com.hgworkspace.client
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertNull
 
 class BackendApiTest {
     @Test
@@ -69,5 +70,86 @@ class BackendApiTest {
         assertEquals("source-7", works.single().sourceWorkId)
         assertEquals(12, works.single().episodeCount)
         assertEquals(listOf("剧情", "短剧"), works.single().tags)
+    }
+
+    @Test
+    fun parsesWorkDetailAndCelebrityShapes() {
+        val detail = BackendJsonParser.parseWorkDetail(
+            """
+            {
+              "id": 7,
+              "source": "novelquick",
+              "source_work_id": "source-7",
+              "series_name": "测试作品",
+              "series_cover": "https://images.example/cover.jpg",
+              "series_intro": "完整简介",
+              "detail_url": "https://source.example/detail/7",
+              "episode_right_text": "已完结",
+              "episode_count": 2,
+              "tags": ["剧情", "短剧"],
+              "celebrities": [
+                "演员甲",
+                {"nickname": "演员乙"},
+                {"name": "演员丙"},
+                {"celebrity_name": "演员丁"},
+                {"name": "演员乙"}
+              ],
+              "status": "active"
+            }
+            """.trimIndent()
+        )
+
+        assertEquals(7, detail.id)
+        assertEquals("novelquick", detail.source)
+        assertEquals("source-7", detail.sourceWorkId)
+        assertEquals("测试作品", detail.name)
+        assertEquals("已完结", detail.episodeRightText)
+        assertEquals(listOf("演员甲", "演员乙", "演员丙", "演员丁"), detail.celebrities)
+    }
+
+    @Test
+    fun parsesAndSortsEpisodePayload() {
+        val episodes = BackendJsonParser.parseEpisodes(
+            """
+            [
+              {
+                "id": 102,
+                "work_id": 7,
+                "source_episode_id": "ep-2",
+                "episode_index": 2,
+                "title": "第二集",
+                "duration_ms": null
+              },
+              {
+                "id": 101,
+                "work_id": 7,
+                "source_episode_id": "ep-1",
+                "episode_index": 1,
+                "title": "第一集",
+                "duration_ms": 65000
+              },
+              {
+                "id": -1,
+                "work_id": 7,
+                "source_episode_id": "invalid",
+                "episode_index": 3
+              }
+            ]
+            """.trimIndent()
+        )
+
+        assertEquals(listOf(101L, 102L), episodes.map { it.id })
+        assertEquals("第一集", episodes.first().title)
+        assertEquals(65_000L, episodes.first().durationMs)
+        assertNull(episodes.last().durationMs)
+    }
+
+    @Test
+    fun rejectsWorkDetailWithoutStableIdentity() {
+        assertFailsWith<BackendApiException> {
+            BackendJsonParser.parseWorkDetail(
+                """{"id":7,"series_name":"缺少来源 ID"}"""
+            )
+        }
     }
 }

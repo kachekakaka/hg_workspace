@@ -4,6 +4,7 @@ import android.app.Application
 import android.content.Context
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -21,6 +22,11 @@ data class MainUiState(
     val status: BackendStatus? = null,
     val works: List<WorkSummary> = emptyList(),
     val error: String = "",
+    val selectedWork: WorkSummary? = null,
+    val workDetail: WorkDetail? = null,
+    val episodes: List<EpisodeSummary> = emptyList(),
+    val detailLoading: Boolean = false,
+    val detailError: String = "",
 )
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
@@ -29,6 +35,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _state = MutableStateFlow(MainUiState(serverInput = settings.loadServerUrl()))
     val state: StateFlow<MainUiState> = _state.asStateFlow()
     private var loadJob: Job? = null
+    private var detailJob: Job? = null
 
     init {
         if (_state.value.serverInput.isNotBlank()) connect()
@@ -47,6 +54,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
         settings.saveServerUrl(normalized)
         loadJob?.cancel()
+        detailJob?.cancel()
         loadJob = viewModelScope.launch {
             _state.update {
                 it.copy(
@@ -54,6 +62,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     normalizedServerUrl = normalized,
                     loading = true,
                     error = "",
+                    selectedWork = null,
+                    workDetail = null,
+                    episodes = emptyList(),
+                    detailLoading = false,
+                    detailError = "",
                 )
             }
             try {
@@ -66,6 +79,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         error = "",
                     )
                 }
+            } catch (error: CancellationException) {
+                throw error
             } catch (error: Exception) {
                 _state.update {
                     it.copy(
@@ -76,6 +91,61 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     )
                 }
             }
+        }
+    }
+
+    fun openWork(work: WorkSummary) {
+        val baseUrl = _state.value.normalizedServerUrl
+        if (baseUrl.isBlank()) {
+            _state.update { it.copy(error = "请先连接后端或 NAS 服务") }
+            return
+        }
+        detailJob?.cancel()
+        _state.update {
+            it.copy(
+                selectedWork = work,
+                workDetail = null,
+                episodes = emptyList(),
+                detailLoading = true,
+                detailError = "",
+            )
+        }
+        detailJob = viewModelScope.launch {
+            try {
+                val payload = withContext(Dispatchers.IO) {
+                    api.loadWorkDetails(baseUrl, work)
+                }
+                _state.update { current ->
+                    if (current.selectedWork?.id != work.id) current else current.copy(
+                        workDetail = payload.work,
+                        episodes = payload.episodes,
+                        detailLoading = false,
+                        detailError = "",
+                    )
+                }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                _state.update { current ->
+                    if (current.selectedWork?.id != work.id) current else current.copy(
+                        detailLoading = false,
+                        detailError = error.message ?: "作品详情加载失败",
+                    )
+                }
+            }
+        }
+    }
+
+    fun closeWork() {
+        detailJob?.cancel()
+        _state.update {
+            it.copy(
+                selectedWork = null,
+                workDetail = null,
+                episodes = emptyList(),
+                detailLoading = false,
+                detailError = "",
+            )
         }
     }
 }

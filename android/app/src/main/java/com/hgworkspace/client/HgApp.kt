@@ -1,12 +1,12 @@
 package com.hgworkspace.client
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -29,6 +29,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -38,7 +39,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
-import androidx.compose.material3.lightColorScheme
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
@@ -64,40 +64,80 @@ fun HgTheme(content: @Composable () -> Unit) {
 @Composable
 fun HgApp(viewModel: MainViewModel, isTv: Boolean) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    var selectedWork by remember { mutableStateOf<WorkSummary?>(null) }
+    val selectedWork = state.selectedWork
+    BackHandler(enabled = selectedWork != null, onBack = viewModel::closeWork)
 
     Scaffold(
         topBar = {
             TopAppBar(
+                navigationIcon = {
+                    if (selectedWork != null) {
+                        TextButton(onClick = viewModel::closeWork) { Text("返回") }
+                    }
+                },
                 title = {
-                    Text(if (isTv) "HG Client · TV" else "HG Client")
-                }
+                    Text(
+                        text = selectedWork?.name ?: if (isTv) "HG Client · TV" else "HG Client",
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                },
             )
         }
     ) { innerPadding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .padding(horizontal = if (isTv) 28.dp else 16.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            ServerPanel(
-                value = state.serverInput,
-                loading = state.loading,
-                onValueChange = viewModel::updateServerInput,
+        if (selectedWork == null) {
+            HomeScreen(
+                state = state,
+                isTv = isTv,
+                modifier = Modifier.padding(innerPadding),
+                onServerChange = viewModel::updateServerInput,
                 onConnect = viewModel::connect,
+                onOpenWork = viewModel::openWork,
             )
-            StatusPanel(state)
-            Text(
-                text = "作品 (${state.works.size})",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
+        } else {
+            WorkDetailsScreen(
+                state = state,
+                selectedWork = selectedWork,
+                isTv = isTv,
+                modifier = Modifier.padding(innerPadding),
             )
-            Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
-                if (state.loading && state.works.isEmpty()) {
+        }
+    }
+}
+
+@Composable
+private fun HomeScreen(
+    state: MainUiState,
+    isTv: Boolean,
+    modifier: Modifier = Modifier,
+    onServerChange: (String) -> Unit,
+    onConnect: () -> Unit,
+    onOpenWork: (WorkSummary) -> Unit,
+) {
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .padding(horizontal = if (isTv) 28.dp else 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        ServerPanel(
+            value = state.serverInput,
+            loading = state.loading,
+            onValueChange = onServerChange,
+            onConnect = onConnect,
+        )
+        StatusPanel(state)
+        Text(
+            text = "作品 (${state.works.size})",
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold,
+        )
+        Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
+            when {
+                state.loading && state.works.isEmpty() -> {
                     CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
-                } else if (state.works.isEmpty()) {
+                }
+                state.works.isEmpty() -> {
                     Text(
                         text = if (state.normalizedServerUrl.isBlank()) {
                             "填写后端或 NAS 服务地址后连接。"
@@ -106,7 +146,8 @@ fun HgApp(viewModel: MainViewModel, isTv: Boolean) {
                         },
                         modifier = Modifier.align(Alignment.Center),
                     )
-                } else if (isTv) {
+                }
+                isTv -> {
                     LazyVerticalGrid(
                         columns = GridCells.Adaptive(260.dp),
                         modifier = Modifier.fillMaxSize(),
@@ -114,39 +155,189 @@ fun HgApp(viewModel: MainViewModel, isTv: Boolean) {
                         verticalArrangement = Arrangement.spacedBy(14.dp),
                     ) {
                         gridItems(state.works, key = { it.id }) { work ->
-                            WorkCard(work, onClick = { selectedWork = work })
+                            WorkCard(work, onClick = { onOpenWork(work) })
                         }
                     }
-                } else {
+                }
+                else -> {
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
                         verticalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
                         items(state.works, key = { it.id }) { work ->
-                            WorkCard(work, onClick = { selectedWork = work })
+                            WorkCard(work, onClick = { onOpenWork(work) })
                         }
                     }
                 }
             }
         }
     }
+}
 
-    selectedWork?.let { work ->
+@Composable
+private fun WorkDetailsScreen(
+    state: MainUiState,
+    selectedWork: WorkSummary,
+    isTv: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    var selectedEpisode by remember(selectedWork.id) { mutableStateOf<EpisodeSummary?>(null) }
+    val detail = state.workDetail
+
+    if (isTv) {
+        Row(
+            modifier = modifier
+                .fillMaxSize()
+                .padding(horizontal = 28.dp, vertical = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(18.dp),
+        ) {
+            WorkMetadataCard(
+                selectedWork = selectedWork,
+                detail = detail,
+                modifier = Modifier.width(340.dp),
+            )
+            EpisodePanel(
+                state = state,
+                isTv = true,
+                modifier = Modifier.weight(1f),
+                onEpisodeClick = { selectedEpisode = it },
+            )
+        }
+    } else {
+        Column(
+            modifier = modifier
+                .fillMaxSize()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            WorkMetadataCard(
+                selectedWork = selectedWork,
+                detail = detail,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            EpisodePanel(
+                state = state,
+                isTv = false,
+                modifier = Modifier.weight(1f),
+                onEpisodeClick = { selectedEpisode = it },
+            )
+        }
+    }
+
+    selectedEpisode?.let { episode ->
         AlertDialog(
-            onDismissRequest = { selectedWork = null },
+            onDismissRequest = { selectedEpisode = null },
             confirmButton = {
-                TextButton(onClick = { selectedWork = null }) { Text("关闭") }
+                TextButton(onClick = { selectedEpisode = null }) { Text("关闭") }
             },
-            title = { Text(work.name) },
+            title = { Text(episode.title.ifBlank { "第 ${episode.episodeIndex} 集" }) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("共 ${work.episodeCount} 集")
-                    if (work.tags.isNotEmpty()) Text("标签：${work.tags.joinToString("、")}")
-                    Text(work.intro.ifBlank { "暂无简介" })
-                    Text("来源 ID：${work.sourceWorkId}", style = MaterialTheme.typography.bodySmall)
+                    Text("第 ${episode.episodeIndex} 集")
+                    Text("来源分集 ID：${episode.sourceEpisodeId}")
+                    episode.durationMs?.let { Text("时长：${formatDuration(it)}") }
+                    Text("播放与下载将在后续批次接入。")
                 }
             },
         )
+    }
+}
+
+@Composable
+private fun WorkMetadataCard(
+    selectedWork: WorkSummary,
+    detail: WorkDetail?,
+    modifier: Modifier = Modifier,
+) {
+    Card(modifier = modifier) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(9.dp),
+        ) {
+            Text(
+                text = detail?.name ?: selectedWork.name,
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+            )
+            val episodeText = buildString {
+                append(detail?.episodeCount ?: selectedWork.episodeCount)
+                append(" 集")
+                val rightText = detail?.episodeRightText.orEmpty().trim()
+                if (rightText.isNotEmpty()) append(" · ").append(rightText)
+            }
+            Text(episodeText)
+            val tags = detail?.tags ?: selectedWork.tags
+            if (tags.isNotEmpty()) Text("标签：${tags.joinToString("、")}")
+            val celebrities = detail?.celebrities.orEmpty()
+            if (celebrities.isNotEmpty()) Text("演员：${celebrities.joinToString("、")}")
+            Text((detail?.intro ?: selectedWork.intro).ifBlank { "暂无简介" })
+            Text(
+                text = "来源：${detail?.source.orEmpty().ifBlank { "--" }} · ${selectedWork.sourceWorkId}",
+                style = MaterialTheme.typography.bodySmall,
+            )
+            if (!detail?.detailUrl.isNullOrBlank()) {
+                Text(
+                    text = "详情地址：${detail?.detailUrl}",
+                    style = MaterialTheme.typography.bodySmall,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun EpisodePanel(
+    state: MainUiState,
+    isTv: Boolean,
+    modifier: Modifier = Modifier,
+    onEpisodeClick: (EpisodeSummary) -> Unit,
+) {
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text("分集 (${state.episodes.size})", style = MaterialTheme.typography.titleLarge)
+        if (state.detailError.isNotBlank()) {
+            Text(state.detailError, color = MaterialTheme.colorScheme.error)
+        }
+        Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
+            when {
+                state.detailLoading && state.episodes.isEmpty() -> {
+                    CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+                }
+                state.episodes.isEmpty() -> {
+                    Text(
+                        text = if (state.detailError.isBlank()) {
+                            "尚未导入分集明细。可先在 Web 管理页刷新公开详情与分集。"
+                        } else {
+                            "分集加载失败，可返回后重试。"
+                        },
+                        modifier = Modifier.align(Alignment.Center),
+                    )
+                }
+                isTv -> {
+                    LazyVerticalGrid(
+                        columns = GridCells.Adaptive(170.dp),
+                        modifier = Modifier.fillMaxSize(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        gridItems(state.episodes, key = { it.id }) { episode ->
+                            EpisodeCard(episode, onClick = { onEpisodeClick(episode) })
+                        }
+                    }
+                }
+                else -> {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        items(state.episodes, key = { it.id }) { episode ->
+                            EpisodeCard(episode, onClick = { onEpisodeClick(episode) })
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -194,6 +385,54 @@ private fun StatusPanel(state: MainUiState) {
 
 @Composable
 private fun WorkCard(work: WorkSummary, onClick: () -> Unit) {
+    FocusCard(onClick = onClick) {
+        Text(
+            text = work.name,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Text("${work.episodeCount} 集 · ${if (work.status == "active") "上架" else "下架"}")
+        if (work.tags.isNotEmpty()) {
+            Text(
+                text = work.tags.take(4).joinToString(" · "),
+                style = MaterialTheme.typography.bodySmall,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        if (work.intro.isNotBlank()) {
+            Spacer(Modifier.height(2.dp))
+            Text(
+                text = work.intro,
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis,
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+    }
+}
+
+@Composable
+private fun EpisodeCard(episode: EpisodeSummary, onClick: () -> Unit) {
+    FocusCard(onClick = onClick) {
+        Text(
+            text = episode.title.ifBlank { "第 ${episode.episodeIndex} 集" },
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Text("第 ${episode.episodeIndex} 集", style = MaterialTheme.typography.bodySmall)
+        episode.durationMs?.let {
+            Text(formatDuration(it), style = MaterialTheme.typography.bodySmall)
+        }
+    }
+}
+
+@Composable
+private fun FocusCard(onClick: () -> Unit, content: @Composable () -> Unit) {
     var focused by remember { mutableStateOf(false) }
     Card(
         onClick = onClick,
@@ -201,8 +440,11 @@ private fun WorkCard(work: WorkSummary, onClick: () -> Unit) {
             .fillMaxWidth()
             .onFocusChanged { focused = it.isFocused }
             .then(
-                if (focused) Modifier.border(3.dp, MaterialTheme.colorScheme.primary, MaterialTheme.shapes.medium)
-                else Modifier
+                if (focused) Modifier.border(
+                    3.dp,
+                    MaterialTheme.colorScheme.primary,
+                    MaterialTheme.shapes.medium,
+                ) else Modifier
             ),
     ) {
         Column(
@@ -211,31 +453,19 @@ private fun WorkCard(work: WorkSummary, onClick: () -> Unit) {
                 .padding(14.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            Text(
-                text = work.name,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Text("${work.episodeCount} 集 · ${if (work.status == "active") "上架" else "下架"}")
-            if (work.tags.isNotEmpty()) {
-                Text(
-                    text = work.tags.take(4).joinToString(" · "),
-                    style = MaterialTheme.typography.bodySmall,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-            if (work.intro.isNotBlank()) {
-                Spacer(Modifier.height(2.dp))
-                Text(
-                    text = work.intro,
-                    maxLines = 3,
-                    overflow = TextOverflow.Ellipsis,
-                    style = MaterialTheme.typography.bodySmall,
-                )
-            }
+            content()
         }
+    }
+}
+
+private fun formatDuration(durationMs: Long): String {
+    val totalSeconds = durationMs / 1000
+    val hours = totalSeconds / 3600
+    val minutes = (totalSeconds % 3600) / 60
+    val seconds = totalSeconds % 60
+    return if (hours > 0) {
+        "%d:%02d:%02d".format(hours, minutes, seconds)
+    } else {
+        "%02d:%02d".format(minutes, seconds)
     }
 }

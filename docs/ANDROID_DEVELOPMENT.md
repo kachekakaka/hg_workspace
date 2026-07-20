@@ -1,15 +1,17 @@
 # Android 通用客户端开发
 
-## 范围
+## 当前范围
 
-当前 Android 工程是一个手机/电视通用 APK 的最小基础：
+Android 工程是一个手机/电视通用 APK：
 
 - 同一个 `app` module；
 - 同时声明普通 Launcher 和 Leanback Launcher；
 - `leanback required=false`、`touchscreen required=false`；
 - 手动保存 FastAPI/NAS 服务地址；
 - 读取 `/api/status` 和 `/api/works`；
-- 手机使用纵向列表，TV 使用遥控器可聚焦网格；
+- 读取 `/api/v1/works/{work_id}` 和 `/api/v1/works/{work_id}/episodes`；
+- 手机使用作品/分集纵向列表；
+- TV 使用遥控器可聚焦作品/分集网格；
 - 当前没有播放器、下载、Room 主片库、TV 内置服务、mDNS 或 WebSocket。
 
 ## 构建
@@ -38,7 +40,7 @@ Docker 镜像固定安装：
 - Android command-line tools `11076708`；
 - Android Platform 35；
 - Build Tools 35.0.0；
-- 项目 Gradle 8.7。
+- Gradle 8.7。
 
 不提交 `local.properties`，也不在宿主机设置 `JAVA_HOME` 或 `ANDROID_HOME`。
 
@@ -57,15 +59,33 @@ scripts\install-apk.bat
 - 输入 `192.168.1.10:8000` 会规范化为 `http://192.168.1.10:8000`；
 - 公网域名必须使用 HTTPS；
 - HTTP 只允许 localhost、单标签局域网主机、`.local`、RFC1918 IPv4 和本地 IPv6；
-- 不允许 URL 用户名/密码、query 或 fragment；
+- 不允许 URL 用户名/密码、query、fragment 或上级目录路径；
 - 地址保存在应用私有 SharedPreferences；
-- Android Manifest 暂时允许 cleartext，以支持局域网 Debug；URL 校验阻止公网明文 HTTP。
+- Manifest 暂时允许 cleartext，以支持局域网 Debug；URL 校验阻止公网明文 HTTP。
+
+## 作品详情和分集
+
+客户端先从 `/api/works` 获取作品摘要。打开作品时读取：
+
+```text
+GET /api/v1/works/{internal-work-id}
+GET /api/v1/works/{internal-work-id}/episodes
+```
+
+客户端校验：
+
+- 详情内部 ID 必须与列表一致；
+- 详情来源作品 ID 必须与列表一致；
+- 每一集的 `work_id` 必须指向当前作品；
+- 无效分集行会被忽略；
+- 分集按 `episode_index` 和内部 ID 排序。
+
+手机详情页显示元数据和分集列表。TV 详情页使用左侧元数据、右侧焦点网格。点击分集目前只显示只读信息，不显示播放或下载入口。
 
 ## 后续
 
-1. 作品详情与分集页面；
-2. playback `direct` / `external_proxy_required` 客户端模型；
-3. 与 NAS 的最小代理 handoff；
-4. Media3 在线播放；
-5. Media3 设备端下载和离线播放；
-6. 手机触控、TV 遥控器和华为 S65 兼容测试。
+1. playback `direct` / `external_proxy_required` 客户端模型；
+2. 与 NAS 的最小代理 handoff；
+3. Media3 在线播放；
+4. Media3 设备端下载和离线播放；
+5. 手机触控、TV 遥控器和华为 S65 兼容测试。
