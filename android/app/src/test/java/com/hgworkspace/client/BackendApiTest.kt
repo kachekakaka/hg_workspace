@@ -4,6 +4,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class BackendApiTest {
     @Test
@@ -79,13 +80,13 @@ class BackendApiTest {
             {
               "id": 7,
               "source": "novelquick",
-              "source_work_id": "source-7",
+              "series_id": "source-7",
               "series_name": "测试作品",
               "series_cover": "https://images.example/cover.jpg",
               "series_intro": "完整简介",
               "detail_url": "https://source.example/detail/7",
               "episode_right_text": "已完结",
-              "episode_count": 2,
+              "episode_cnt": 2,
               "tags": ["剧情", "短剧"],
               "celebrities": [
                 "演员甲",
@@ -142,6 +143,81 @@ class BackendApiTest {
         assertEquals("第一集", episodes.first().title)
         assertEquals(65_000L, episodes.first().durationMs)
         assertNull(episodes.last().durationMs)
+    }
+
+    @Test
+    fun parsesPlaybackProvidersAndDirectResolution() {
+        val providers = BackendJsonParser.parsePlaybackProviders(
+            """{"sources":["novelquick","manual","novelquick",""]}"""
+        )
+        assertEquals(setOf("novelquick", "manual"), providers)
+
+        val direct = BackendJsonParser.parsePlayback(
+            """
+            {
+              "episode_id": 101,
+              "provider": "synthetic",
+              "delivery": "direct",
+              "url": "https://media.example/video.mp4?token=short",
+              "mime_type": "video/mp4",
+              "expires_at": "2026-07-20T05:30:00+00:00",
+              "cached": false
+            }
+            """.trimIndent(),
+            expectedEpisodeId = 101,
+        )
+        assertEquals(PlaybackDelivery.DIRECT, direct.delivery)
+        assertEquals("https://media.example/video.mp4?token=short", direct.url)
+        assertTrue(!direct.cached)
+    }
+
+    @Test
+    fun parsesExternalProxyResolutionWithoutLeakingUrl() {
+        val external = BackendJsonParser.parsePlayback(
+            """
+            {
+              "episode_id": 102,
+              "provider": "synthetic",
+              "delivery": "external_proxy_required",
+              "url": null,
+              "mime_type": "video/mp4",
+              "expires_at": "2026-07-20T05:30:00+00:00",
+              "cached": true
+            }
+            """.trimIndent(),
+            expectedEpisodeId = 102,
+        )
+        assertEquals(PlaybackDelivery.EXTERNAL_PROXY_REQUIRED, external.delivery)
+        assertNull(external.url)
+        assertTrue(external.cached)
+    }
+
+    @Test
+    fun rejectsUnsafeOrLegacyPlaybackResponses() {
+        assertFailsWith<BackendApiException> {
+            BackendJsonParser.parsePlayback(
+                """{"episode_id":1,"provider":"x","delivery":"direct","url":"http://media.example/a.mp4","expires_at":"later","cached":false}""",
+                1,
+            )
+        }
+        assertFailsWith<BackendApiException> {
+            BackendJsonParser.parsePlayback(
+                """{"episode_id":1,"provider":"x","delivery":"proxy_required","url":null,"expires_at":"later","cached":false}""",
+                1,
+            )
+        }
+        assertFailsWith<BackendApiException> {
+            BackendJsonParser.parsePlayback(
+                """{"episode_id":1,"provider":"x","delivery":"external_proxy_required","url":"https://secret.example/a.mp4","expires_at":"later","cached":false}""",
+                1,
+            )
+        }
+        assertFailsWith<BackendApiException> {
+            BackendJsonParser.parsePlayback(
+                """{"episode_id":2,"provider":"x","delivery":"direct","url":"https://media.example/a.mp4","expires_at":"later","cached":false}""",
+                1,
+            )
+        }
     }
 
     @Test

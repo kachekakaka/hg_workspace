@@ -12,7 +12,8 @@ Android 工程是一个手机/电视通用 APK：
 - 读取 `/api/v1/works/{work_id}` 和 `/api/v1/works/{work_id}/episodes`；
 - 手机使用作品/分集纵向列表；
 - TV 使用遥控器可聚焦作品/分集网格；
-- 当前没有播放器、下载、Room 主片库、TV 内置服务、mDNS 或 WebSocket。
+- 读取 playback provider 列表并解析 `direct` / `external_proxy_required`；
+- 当前没有 Media3 播放器、下载、Room 主片库、TV 内置服务、mDNS 或 WebSocket。
 
 ## 构建
 
@@ -65,7 +66,7 @@ scripts\install-apk.bat
 
 ## 作品详情和分集
 
-客户端先从 `/api/works` 获取作品摘要。打开作品时读取：
+客户端先从 `/api/works` 获取作品摘要。打开作品时依次读取：
 
 ```text
 GET /api/v1/works/{internal-work-id}
@@ -78,14 +79,23 @@ GET /api/v1/works/{internal-work-id}/episodes
 - 详情来源作品 ID 必须与列表一致；
 - 每一集的 `work_id` 必须指向当前作品；
 - 无效分集行会被忽略；
-- 分集按 `episode_index` 和内部 ID 排序。
+- 分集按 `episode_index` 和内部 ID 排序；
 
-手机详情页显示元数据和分集列表。TV 详情页使用左侧元数据、右侧焦点网格。点击分集目前只显示只读信息，不显示播放或下载入口。
+手机详情页显示元数据和分集列表。TV 详情页使用左侧元数据、右侧焦点网格。
+
+客户端连接时读取 `GET /api/v1/playback/providers`。点击分集时：
+
+- 来源未配置 provider：只显示明确提示；
+- 来源已配置 provider：允许调用 `POST /api/v1/episodes/{episode_id}/playback/resolve`；
+- `direct`：校验 HTTPS URL，但不显示 URL、不启动播放器；
+- `external_proxy_required`：要求 URL 必须为空，只显示等待 NAS handoff；
+- 旧 `proxy_required`、HTTP URL、跨分集 ID 或泄露来源 URL 的响应会被拒绝。
 
 ## 后续
 
-1. playback `direct` / `external_proxy_required` 客户端模型；
+1. 授权来源 production playback provider；
 2. 与 NAS 的最小代理 handoff；
-3. Media3 在线播放；
-4. Media3 设备端下载和离线播放；
-5. 手机触控、TV 遥控器和华为 S65 兼容测试。
+3. Media3 `direct` 在线播放；
+4. NAS handoff 完成后的外部代理播放；
+5. Media3 设备端下载和离线播放；
+6. 手机触控、TV 遥控器和华为 S65 兼容测试。

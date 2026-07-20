@@ -28,9 +28,11 @@ Android：
 - 手机纵向作品/分集列表；
 - TV 遥控器可聚焦作品/分集网格；
 - 作品详情显示简介、标签、演员、来源和集数；
+- 读取 playback provider 列表并解析 `direct` / `external_proxy_required` 响应；
+- 仅显示交付能力状态，不在 provider/NAS 未就绪时启动播放器；
 - Docker 中运行 JVM 单元测试并生成 Debug APK。
 
-生产环境目前没有注册 playback provider。Media3 播放、NAS handoff、设备端下载和真机测试尚未完成。
+生产环境目前没有注册 playback provider。客户端会诚实显示“未配置播放 provider”；Media3 播放、NAS handoff、设备端下载和真机测试尚未完成。
 
 ## 部署边界
 
@@ -127,7 +129,7 @@ scripts\install-apk.bat
 → 手机列表或 TV 焦点网格选择分集
 ```
 
-点击分集目前只显示稳定身份、集序和可选时长，不显示虚假的播放或下载按钮。
+点击分集会显示稳定身份、集序和可选时长。若后端声明对应来源已有 provider，可执行一次“检查播放能力”：`direct` 只确认短期 HTTPS 地址已解析，`external_proxy_required` 只确认仍需 NAS handoff；两者都不会在本批次启动播放器或下载。
 
 ## Playback 解析契约
 
@@ -162,10 +164,10 @@ CI 运行仓库卫生、明显 secret、Python 编译、Compose 配置、后端 
 
 ## 后续顺序
 
-1. 增加 Android playback `direct` / `external_proxy_required` 客户端模型；
-2. 在授权边界明确后实现首个生产 playback provider；
-3. 与 NAS 定义最小、可审计的外部代理 handoff；
-4. 使用 Media3 完成在线播放；
+1. 在授权边界明确后实现首个生产 playback provider；
+2. 与 NAS 定义最小、可审计的外部代理 handoff；
+3. 使用 Media3 完成 `direct` 在线播放；
+4. 在 NAS handoff 完成后支持 `external_proxy_required` 播放；
 5. 实现设备端下载和离线播放；
 6. 完成 Android 14、Android TV/盒子和华为 S65 兼容验证。
 
