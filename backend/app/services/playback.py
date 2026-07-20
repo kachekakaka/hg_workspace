@@ -128,7 +128,7 @@ class PlaybackService:
         return PlaybackRead(
             episode_id=resolution.episode_id,
             provider=resolution.provider,
-            delivery="direct" if direct else "proxy_required",
+            delivery="direct" if direct else "external_proxy_required",
             url=resolution.source_url if direct else None,
             mime_type=resolution.mime_type,
             expires_at=resolution.expires_at.isoformat(),
